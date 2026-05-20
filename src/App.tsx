@@ -5,7 +5,7 @@ import {
   Sparkles, ArrowLeftRight, TrendingUp, LogOut,
   User, Loader2, BarChart3, ImagePlus,
 } from 'lucide-react';
-import fortesLogo from './public/fortes-logo.gif';
+import fortesLogo from './public/fortes-logo.png';
 import AdminDashboard from './components/AdminDashboard';
 import AdminStickerEditor from './components/AdminStickerEditor';
 import TradeSystem from './components/TradeSystem';
@@ -140,8 +140,14 @@ const AlbumPage = ({ pageIndex, ownedStickers, onStickerClick, direction = 0, al
         <img
           src={fortesLogo}
           alt=""
-          className="absolute w-[80%] max-w-[460px] top-[2%] right-[-14%] opacity-[0.18]"
-          style={{ mixBlendMode: 'multiply' }}
+          className="absolute w-[72%] max-w-[420px]"
+          style={{
+            top: '50%',
+            right: '-10%',
+            transform: 'translateY(-50%)',
+            opacity: 0.18,
+            mixBlendMode: 'multiply',
+          }}
         />
       </div>
 
