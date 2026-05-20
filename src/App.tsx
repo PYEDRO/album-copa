@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Book, Gamepad2, Package, Search, Trophy, ChevronRight, ChevronLeft,
   Sparkles, ArrowLeftRight, TrendingUp, LogOut,
-  Flag, User, Loader2, BarChart3, ImagePlus,
+  User, Loader2, BarChart3, ImagePlus,
 } from 'lucide-react';
 import AdminDashboard from './components/AdminDashboard';
 import AdminStickerEditor from './components/AdminStickerEditor';
@@ -37,40 +37,6 @@ function toCollaborator(s: DbSticker): Collaborator {
   };
 }
 
-const RobotMascot = ({ pageIndex, isPageComplete }: { pageIndex: number, isPageComplete?: boolean }) => {
-  const phrases = isPageComplete
-    ? ["Uau! Time completo!", "Que coleção incrível!", "Você é fera!", "Álbum de mestre!"]
-    : ["Boa sorte no pack!", "Quase completando!", "Que figurinha top!", "Falta pouco agora!", "Rumo ao troféu!", "Show de bola!", "Incrível esse!", "Bora colecionar!"];
-  const phrase = phrases[pageIndex % phrases.length];
-  return (
-    <motion.div initial={{ scale: 0, opacity: 0, x: 20 }} animate={{ scale: 1, opacity: 1, x: 0 }} whileHover={{ y: -8, scale: 1.1, rotate: 2 }} className="absolute -bottom-6 -right-6 z-30 hidden sm:block cursor-help drop-shadow-2xl">
-      <div className="relative">
-        <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 1, duration: 0.5 }} className="absolute -top-12 -left-20 bg-white text-slate-900 px-3 py-1.5 rounded-2xl rounded-br-none text-[8px] font-black uppercase shadow-2xl border-2 border-red-500/20 whitespace-nowrap z-40 transform -rotate-3">
-          <div className="flex items-center gap-2"><span className="text-red-600">{phrase}</span><div className="w-1 h-1 bg-emerald-500 rounded-full animate-ping" /></div>
-          <div className="absolute bottom-[-8px] right-2 w-0 h-0 border-l-[8px] border-l-transparent border-t-[8px] border-t-white" />
-        </motion.div>
-        <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="25" y="15" width="50" height="35" rx="12" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="2" />
-          <rect x="30" y="20" width="40" height="20" rx="6" fill="#1E293B" />
-          <circle cx="40" cy="28" r="2" fill="#60A5FA" /><circle cx="60" cy="28" r="2" fill="#60A5FA" />
-          <path d="M45 35 Q50 38 55 35" stroke="#60A5FA" strokeWidth="1.5" strokeLinecap="round" />
-          <path d="M30 50 L70 50 L75 75 L25 75 Z" fill="#DC2626" stroke="#991B1B" strokeWidth="2" />
-          <text x="50" y="68" textAnchor="middle" fill="white" fontSize="12" fontWeight="900" style={{ fontStyle: 'italic' }}>F</text>
-          <motion.g animate={{ rotate: [0, -30, 0] }} transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }} style={{ transformOrigin: "30px 55px" }}>
-            <path d="M30 55 L15 40" stroke="#94A3B8" strokeWidth="5" strokeLinecap="round" />
-            <circle cx="15" cy="40" r="4" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5" />
-          </motion.g>
-          <path d="M70 55 L82 62" stroke="#94A3B8" strokeWidth="5" strokeLinecap="round" />
-          <g transform="translate(85, 70) scale(0.8)"><circle r="10" fill="white" stroke="#64748B" strokeWidth="1" /><circle r="3" fill="#1E293B" /></g>
-          <rect x="35" y="75" width="8" height="12" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5" />
-          <rect x="57" y="75" width="8" height="12" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5" />
-          <rect x="32" y="85" width="12" height="5" rx="2.5" fill="#DC2626" />
-          <rect x="56" y="85" width="12" height="5" rx="2.5" fill="#DC2626" />
-        </svg>
-      </div>
-    </motion.div>
-  );
-};
 
 
 const StickerCard = ({ collaborator, isCollected = true, onClick }: { collaborator: Collaborator; isCollected?: boolean; onClick?: () => void; key?: any; }) => {
@@ -121,56 +87,108 @@ const StickerCard = ({ collaborator, isCollected = true, onClick }: { collaborat
   );
 };
 
+// Card individual do álbum — design novo
+const AlbumCard = ({ collaborator, globalIndex, isCollected, onClick }: {
+  collaborator: Collaborator; globalIndex: number; isCollected: boolean; onClick: () => void;
+}) => {
+  if (!isCollected) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="w-full aspect-[3/4] bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center select-none">
+          <span className="text-2xl md:text-3xl font-black italic text-slate-300">{globalIndex + 1}</span>
+        </div>
+        <p className="text-[7px] md:text-[8px] font-black uppercase tracking-tight text-center text-slate-600 truncate px-0.5 leading-tight">{collaborator.name}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5 cursor-pointer group" onClick={onClick}>
+      <div className="w-full aspect-[3/4] bg-white border-[3px] border-red-500 rounded-2xl overflow-hidden relative shadow-md group-hover:shadow-xl transition-shadow">
+        <img src={collaborator.imageUrl} alt={collaborator.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
+        <div className="absolute top-1.5 right-1.5 bg-red-600/80 backdrop-blur-sm rounded-md px-1 py-0.5">
+          <span className="text-[6px] font-black text-white leading-none">{globalIndex + 1}</span>
+        </div>
+      </div>
+      <p className="text-[7px] md:text-[8px] font-black uppercase tracking-tight text-center text-slate-800 truncate px-0.5 leading-tight">{collaborator.name}</p>
+    </div>
+  );
+};
+
 const AlbumPage = ({ pageIndex, ownedStickers, onStickerClick, direction = 0, allStickers }: {
   pageIndex: number; ownedStickers: string[]; onStickerClick: (c: Collaborator) => void;
   direction?: number; allStickers: Collaborator[]; key?: any;
 }) => {
   const startIdx = pageIndex * STICKERS_PER_PAGE;
   const pageStickers = allStickers.slice(startIdx, startIdx + STICKERS_PER_PAGE);
-  const teamName = pageStickers[0]?.team || 'Seleção';
+  const completionPct = Math.round((pageStickers.filter(c => ownedStickers.includes(c.id)).length / Math.max(pageStickers.length, 1)) * 100);
   const isPageComplete = pageStickers.length > 0 && pageStickers.every(s => ownedStickers.includes(s.id));
+  const groupLetter = String.fromCharCode(65 + pageIndex);
+  const firstTwo = pageStickers.slice(0, 2);
+  const restEight = pageStickers.slice(2);
+
   return (
     <motion.div key={pageIndex}
       initial={{ opacity: 0, x: direction > 0 ? 100 : -100, rotateY: direction > 0 ? 45 : -45, scale: 0.95 }}
-      animate={{ opacity: 1, x: 0, rotateY: 0, scale: 1, transition: { type: "spring", stiffness: 40, damping: 20, mass: 1.5 } }}
-      exit={{ opacity: 0, x: direction > 0 ? -100 : 100, rotateY: direction > 0 ? -45 : 45, scale: 0.95, transition: { duration: 0.8, ease: "easeInOut" } }}
-      style={{ perspective: 1200, transformOrigin: direction > 0 ? "left center" : "right center" }}
-      className="relative bg-white min-h-[480px] md:min-h-[580px] h-full p-4 md:p-6 pt-10 overflow-visible flex flex-col w-full shadow-2xl rounded-[32px] border-2 border-slate-200 mx-auto max-w-2xl"
+      animate={{ opacity: 1, x: 0, rotateY: 0, scale: 1, transition: { type: 'spring', stiffness: 40, damping: 20, mass: 1.5 } }}
+      exit={{ opacity: 0, x: direction > 0 ? -100 : 100, rotateY: direction > 0 ? -45 : 45, scale: 0.95, transition: { duration: 0.8, ease: 'easeInOut' } }}
+      style={{ perspective: 1200, transformOrigin: direction > 0 ? 'left center' : 'right center' }}
+      className="relative bg-white w-full shadow-2xl rounded-[32px] border-2 border-slate-100 mx-auto max-w-2xl overflow-hidden"
     >
-      <motion.div initial={{ opacity: 0, x: '-100%' }} animate={{ x: '200%', opacity: [0, 0.2, 0] }} transition={{ duration: 1.5, ease: "easeInOut" }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none z-50 transform skew-x-12" />
-      <div className="absolute inset-0 album-bg-pattern pointer-events-none opacity-20" />
-      <div className="curled-corner scale-50 origin-top-right opacity-30" />
-      <div className="relative z-10 flex flex-col h-full space-y-4">
-        <div className="flex flex-col md:flex-row items-center justify-between border-b-2 border-red-600/30 pb-2 gap-2">
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <div className="w-9 h-9 md:w-10 md:h-10 bg-red-600 rounded-lg flex items-center justify-center text-white font-black text-base md:text-lg shadow-lg border-2 border-red-800 rotate-3 z-10 relative">{pageIndex + 1}</div>
-            <div className="space-y-0 min-w-0 flex-1">
-              <div className="flex items-center gap-1">
-                <Flag size={8} className={isPageComplete ? "text-amber-500 fill-amber-500" : "text-red-500 fill-red-500"} />
-                <span className="text-[7px] font-black uppercase text-slate-400 tracking-widest">Grupo {String.fromCharCode(65 + pageIndex)}</span>
-                {isPageComplete && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="ml-2 text-[6px] bg-amber-500 text-white px-1 py-0.5 rounded-full font-black uppercase tracking-tighter">Time Completo!</motion.span>}
-              </div>
-              <div className="flex gap-1">
-                <span className="text-[5px] bg-red-600 text-white px-1 py-0.5 rounded font-black uppercase shadow-sm">Oficial</span>
-                <div className="flex items-center gap-0.5 bg-emerald-600 text-white px-1 py-0.5 rounded font-black uppercase shadow-sm">
-                  <User size={5} className="text-white" /><span className="text-[5px]">Copa Fanfortes</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 bg-white/60 backdrop-blur-md p-1 rounded-lg border border-slate-100 flex-shrink-0 shadow-sm">
-            <div className="text-center px-1"><div className="text-[6px] font-black text-slate-400 uppercase leading-none">Copa</div><div className="text-xs font-black text-red-600 italic leading-none">Fanfortes</div></div>
-            <div className="h-4 w-px bg-slate-200" />
-            <div className="text-center px-1"><div className="text-[6px] font-black text-slate-400 uppercase leading-none">Completo</div>
-              <div className="text-xs font-black text-slate-800 leading-none">{Math.round((pageStickers.filter(c => ownedStickers.includes(c.id)).length / Math.max(pageStickers.length, 1)) * 100)}%</div>
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-5 gap-2 md:gap-3 overflow-visible relative">
-          {pageStickers.map(c => (<StickerCard key={c.id} collaborator={c} isCollected={ownedStickers.includes(c.id)} onClick={() => onStickerClick(c)} />))}
-        </div>
-        <RobotMascot pageIndex={pageIndex} isPageComplete={isPageComplete} />
+      {/* Marca d'água de fundo */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-end">
+        <svg className="opacity-[0.07] text-red-500 translate-x-16" width="380" height="460" viewBox="0 0 380 460" fill="currentColor">
+          <ellipse cx="190" cy="130" rx="90" ry="110" />
+          <path d="M60 270 Q80 240 190 250 Q300 240 320 270 L340 460 H40 Z" />
+          <rect x="150" y="230" width="80" height="20" rx="10" fill="white" />
+        </svg>
       </div>
+
+      {/* Brilho de entrada */}
+      <motion.div initial={{ opacity: 0, x: '-100%' }} animate={{ x: '200%', opacity: [0, 0.15, 0] }} transition={{ duration: 1.6, ease: 'easeInOut' }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent pointer-events-none z-50 transform skew-x-12" />
+
+      <div className="relative z-10 p-5 md:p-8 space-y-4">
+        {/* Linha 1: Painel de info (2 colunas) + 2 primeiros cards */}
+        <div className="grid grid-cols-4 gap-3 items-end">
+          {/* Painel esquerdo */}
+          <div className="col-span-2 space-y-2 pb-1">
+            <div className="leading-none">
+              <p className="text-3xl md:text-4xl font-black uppercase tracking-tighter text-red-600 leading-none">COPA</p>
+              <p className="text-3xl md:text-4xl font-black uppercase tracking-tighter text-slate-900 leading-none">FANFORTES</p>
+            </div>
+            <div>
+              <p className="text-5xl md:text-6xl font-black leading-none text-red-600">{completionPct}%</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 mt-0.5">Álbum Completo</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-[9px] font-black uppercase tracking-wide px-3 py-1 rounded-full ${isPageComplete ? 'bg-amber-500 text-white' : 'bg-red-600 text-white'}`}>
+                Grupo {groupLetter}
+              </span>
+              {isPageComplete && (
+                <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-[8px] font-black uppercase text-amber-500">✓ Completo!</motion.span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <User size={10} className="text-slate-400" />
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Copa Fanfortes</span>
+            </div>
+          </div>
+
+          {/* Cards 1 e 2 */}
+          {firstTwo.map((c, i) => (
+            <AlbumCard key={c.id} collaborator={c} globalIndex={startIdx + i} isCollected={ownedStickers.includes(c.id)} onClick={() => onStickerClick(c)} />
+          ))}
+        </div>
+
+        {/* Linha 2+: 8 cards restantes em 4 colunas */}
+        <div className="grid grid-cols-4 gap-3">
+          {restEight.map((c, i) => (
+            <AlbumCard key={c.id} collaborator={c} globalIndex={startIdx + i + 2} isCollected={ownedStickers.includes(c.id)} onClick={() => onStickerClick(c)} />
+          ))}
+        </div>
+      </div>
+
+      {/* Rodapé vermelho */}
+      <div className="h-2 bg-red-600 w-full" />
     </motion.div>
   );
 };
@@ -240,6 +258,8 @@ export default function App() {
   // ── Pack status vem do servidor via usePacks ─────────────────
   const packsRemaining = packs.packsRemaining;
   const [gameState, setGameState] = useState<GameState>({ target: null, attemptsRemaining: 2, options: [], feedback: null, won: false, canPlay: true });
+  const [gameReward, setGameReward] = useState<DbSticker | null>(null);
+  const [gameRewardClaiming, setGameRewardClaiming] = useState(false);
 
   useEffect(() => { localStorage.setItem('game_stats', JSON.stringify(localGameStats)); }, [localGameStats]);
 
@@ -276,6 +296,33 @@ export default function App() {
     refetchLeaderboard();
   };
 
+  const claimGameReward = useCallback(async (): Promise<DbSticker | null> => {
+    if (!auth.user) return null;
+    setGameRewardClaiming(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/claim-game-reward`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const json = await res.json();
+      if (res.ok && json.success && json.sticker) {
+        await packs.refetchInventory();
+        return json.sticker as DbSticker;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      setGameRewardClaiming(false);
+    }
+  }, [auth.user, packs]);
+
   const startNewGame = () => {
     const today = new Date().toISOString().split('T')[0];
     const isToday = localGameStats.lastGuessDate === today;
@@ -284,6 +331,7 @@ export default function App() {
       setGameState(p => ({ ...p, feedback: `Você já jogou ${MAX_GUESSES_PER_DAY} vezes hoje! Volte amanhã.`, canPlay: false }));
       setView('game'); return;
     }
+    setGameReward(null);
     const pool = allCollaborators.length > 0 ? allCollaborators : COLLABORATORS;
     const target = pool[Math.floor(Math.random() * pool.length)];
     const opts = [target];
@@ -301,6 +349,8 @@ export default function App() {
         const isToday = p.lastGuessDate === today;
         return { ...p, guessesRight: p.guessesRight + 1, guessesTotal: p.guessesTotal + 1, lastGuessDate: today, dailyGuessCount: (isToday ? (p.dailyGuessCount ?? 0) : 0) + 1 };
       });
+      setGameReward(null);
+      claimGameReward().then(sticker => { if (sticker) setGameReward(sticker); });
     } else {
       const rem = gameState.attemptsRemaining - 1;
       setGameState(p => ({ ...p, attemptsRemaining: rem, feedback: rem > 0 ? 'Tente novamente! Analise bem a bio e os atributos.' : `Era ${gameState.target?.name}!` }));
@@ -363,7 +413,6 @@ export default function App() {
           <button onClick={openPack} disabled={packs.claiming || packsRemaining <= 0} className="flex items-center gap-2 bg-white hover:bg-red-50 disabled:opacity-60 text-red-600 px-4 py-2 rounded-lg text-sm font-black transition-all shadow-lg hover:scale-105 active:scale-95 ml-2 border-2 border-red-700">
             {packs.claiming ? <Loader2 size={18} className="animate-spin" /> : <Package size={18} />}
             <span className="hidden sm:inline italic uppercase">PACK</span>
-            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${packsRemaining > 0 ? 'bg-red-600 text-white' : 'bg-slate-200 text-slate-500'}`}>{packsRemaining}/{packs.maxPacksPerDay}</span>
           </button>
         </div>
       </nav>
@@ -415,7 +464,7 @@ export default function App() {
                 <div className="absolute top-0 right-0 w-64 h-64 bg-red-200/20 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
                 <div className="w-20 h-20 bg-red-600 rounded-2xl rotate-12 flex items-center justify-center shadow-2xl border-4 border-red-400 mb-8 mx-auto"><Search className="text-white" size={36} /></div>
                 <h2 className="text-4xl md:text-5xl font-black uppercase italic text-red-600 mb-4 tracking-tighter">Quem é este Player?</h2>
-                <p className="text-slate-500 font-medium mb-12">Desvende a identidade através dos atributos de combate.</p>
+                <p className="text-slate-500 font-medium mb-12">Desvende as habilidades ocultas de cada jogador</p>
                 {!gameState.canPlay && gameState.feedback ? (
                   <div className="space-y-6">
                     <p className="p-8 bg-white border-2 border-red-100 rounded-3xl text-red-600 font-black uppercase italic">{gameState.feedback}</p>
@@ -457,6 +506,22 @@ export default function App() {
                         </div>
                         {gameState.feedback && (
                           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className={`p-5 rounded-2xl text-center font-black italic uppercase text-xs border-2 tracking-widest ${gameState.won ? 'bg-emerald-600 border-emerald-700 text-white shadow-lg' : 'bg-red-50 border-red-100 text-red-600'}`}>{gameState.feedback}</motion.div>
+                        )}
+                        {gameState.won && (
+                          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="p-5 bg-amber-50 border-2 border-amber-200 rounded-2xl text-center space-y-3">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Recompensa de Vitória</p>
+                            {gameRewardClaiming ? (
+                              <div className="flex items-center justify-center gap-2 text-amber-600"><Loader2 size={20} className="animate-spin" /><span className="text-xs font-black italic uppercase">Buscando figurinha...</span></div>
+                            ) : gameReward ? (
+                              <div className="flex flex-col items-center gap-2">
+                                <p className="text-xs font-black italic uppercase text-amber-600">Nova figurinha desbloqueada!</p>
+                                <div className="w-28 mx-auto"><StickerCard collaborator={toCollaborator(gameReward)} /></div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">{gameReward.name}</span>
+                              </div>
+                            ) : (
+                              <p className="text-[10px] italic text-amber-500">Recompensa já coletada hoje ou álbum completo.</p>
+                            )}
+                          </motion.div>
                         )}
                         <div className="flex items-center justify-between pt-6">
                           <div className="flex gap-2">{[...Array(2)].map((_, i) => (<div key={i} className={`w-3 h-3 rounded-full ${i < gameState.attemptsRemaining ? 'bg-red-600 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-slate-200'}`} />))}</div>

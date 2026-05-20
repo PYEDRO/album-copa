@@ -509,7 +509,7 @@ export default function AdminStickerEditor() {
 
                 {/* Bio */}
                 <div>
-                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Bio / Descrição</label>
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Talentos Ocultos</label>
                   <textarea
                     value={form.bio ?? ''}
                     onChange={e => setForm(f => ({ ...f, bio: e.target.value }))}

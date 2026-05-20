@@ -1,7 +1,9 @@
 /**
  * Edge Function: claim-daily-pack
- * Handles daily pack claiming with pity system and anti-fraud.
- * All critical DB writes delegated to claim_daily_pack() PL/pgSQL transaction.
+ * Regras de geração do pack:
+ *  - Máx. 1 figurinha repetida (já no álbum) por pack
+ *  - Nenhuma figurinha se repete dentro do mesmo pack
+ *  - Pity system mantido para raridade
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -22,6 +24,9 @@ const SCORE_MAP: Record<string, number> = {
   epic: 7,
   legendary: 15,
 }
+
+const STICKERS_PER_PACK = 3
+const MAX_DUPLICATES_PER_PACK = 1
 
 interface Sticker {
   id: string
@@ -77,7 +82,6 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Rate limiting 100% server-side via daily_claims ──────
-    // Conta packs concluídos hoje diretamente no banco
     const today = new Date().toISOString().split('T')[0]
     const MAX_PACKS_PER_DAY = 2
 
@@ -120,33 +124,43 @@ Deno.serve(async (req: Request) => {
       cacheTimestamp = now
     }
 
-    // ── Fetch owned sticker counts ────────────────────────────
+    // ── Fetch owned sticker counts (snapshot do álbum antes do pack) ──
     const { data: owned } = await supabaseAdmin
       .from('user_stickers')
       .select('sticker_id, quantity')
       .eq('user_id', user.id)
 
-    const ownedMap = new Map<string, number>(
+    // albumOwnedMap: estado do álbum ANTES deste pack — não é alterado durante a geração
+    const albumOwnedMap = new Map<string, number>(
       (owned ?? []).map((s: { sticker_id: string; quantity: number }) => [s.sticker_id, s.quantity]),
     )
 
-    // ── Generate 3 stickers with pity system ──────────────────
+    // ── Gera figurinhas do pack com novas regras ───────────────
+    //   • Nenhuma figurinha se repete dentro do pack (pickedIds)
+    //   • Máx. MAX_DUPLICATES_PER_PACK cartas já possuídas no álbum
     const generatedStickers: Sticker[] = []
+    const pickedIds = new Set<string>()
+    let duplicatesInPack = 0
     let pityCounter = profile.pity_counter ?? 0
 
-    for (let i = 0; i < 3; i++) {
-      const sticker = generateSticker(stickerCache!, ownedMap, pityCounter)
+    for (let i = 0; i < STICKERS_PER_PACK; i++) {
+      const mustBeNew = duplicatesInPack >= MAX_DUPLICATES_PER_PACK
+      const sticker = generateSticker(stickerCache!, albumOwnedMap, pityCounter, pickedIds, mustBeNew)
       generatedStickers.push(sticker)
 
-      // Update pity counter per SDD §5.3
+      // Conta duplicata (carta que já estava no álbum antes deste pack)
+      if ((albumOwnedMap.get(sticker.id) ?? 0) > 0) {
+        duplicatesInPack++
+      }
+
+      pickedIds.add(sticker.id)
+
+      // Atualiza pity counter (SDD §5.3)
       if (sticker.rarity === 'epic' || sticker.rarity === 'legendary') {
         pityCounter = 0
       } else {
         pityCounter++
       }
-
-      // Update owned map for subsequent iterations (anti-duplicate within pack)
-      ownedMap.set(sticker.id, (ownedMap.get(sticker.id) ?? 0) + 1)
     }
 
     const scoreGained = generatedStickers.reduce(
@@ -200,12 +214,19 @@ Deno.serve(async (req: Request) => {
   }
 })
 
-// ── Sticker generation with pity system (SDD §5.3) ──────────
-
+// ── Geração de figurinha com pity + novas restrições ────────────
+//
+// Parâmetros:
+//   albumOwnedMap  — estado do álbum ANTES do pack (não muta)
+//   pickedInThisPack — IDs já escolhidos neste pack
+//   mustBeNew      — se true, força carta não possuída no álbum
+//
 function generateSticker(
   allStickers: Sticker[],
-  ownedMap: Map<string, number>,
+  albumOwnedMap: Map<string, number>,
   pityCounter: number,
+  pickedInThisPack: Set<string>,
+  mustBeNew: boolean,
 ): Sticker {
   const BASE_WEIGHTS: Record<string, number> = {
     common: 70,
@@ -237,15 +258,33 @@ function generateSticker(
     }
   }
 
-  // Filter by rarity, apply anti-duplicate weight: w = 1 / (1 + ownedCount)
-  const pool = allStickers.filter((s) => s.rarity === selectedRarity)
-  const fallback = allStickers
+  // Pool by rarity, excluding cards already picked in this pack
+  let pool = allStickers
+    .filter((s) => s.rarity === selectedRarity)
+    .filter((s) => !pickedInThisPack.has(s.id))
 
-  const candidates = pool.length > 0 ? pool : fallback
+  // Fallback: se não sobrou nenhuma da raridade selecionada, abre para todas
+  if (pool.length === 0) {
+    pool = allStickers.filter((s) => !pickedInThisPack.has(s.id))
+  }
 
+  // Fallback extremo: se já escolhemos todas as cartas (não deve ocorrer com 55+)
+  if (pool.length === 0) {
+    pool = allStickers
+  }
+
+  // Se deve ser nova (mustBeNew): filtra para cartas não possuídas no álbum
+  let candidates = pool
+  if (mustBeNew) {
+    const newOnes = pool.filter((s) => (albumOwnedMap.get(s.id) ?? 0) === 0)
+    if (newOnes.length > 0) candidates = newOnes
+    // Se não há cartas novas disponíveis (álbum quase completo), usa pool sem filtro
+  }
+
+  // Pesos: preferência forte por cartas novas quando não é mustBeNew
   const poolWeights = candidates.map((s) => {
-    const owned = ownedMap.get(s.id) ?? 0
-    return 1 / (1 + owned)
+    const owned = albumOwnedMap.get(s.id) ?? 0
+    return owned === 0 ? 5 : 1
   })
 
   const totalPoolWeight = poolWeights.reduce((a, b) => a + b, 0)
