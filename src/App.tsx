@@ -134,35 +134,39 @@ const AlbumPage = ({ pageIndex, ownedStickers, onStickerClick, direction = 0, al
       style={{ perspective: 1200, transformOrigin: direction > 0 ? 'left center' : 'right center' }}
       className="relative bg-white w-full shadow-2xl rounded-[32px] border-2 border-slate-100 mx-auto max-w-2xl overflow-hidden"
     >
-      {/* Logo Fortes "iF" como marca d'água */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center">
+      {/* ── Marca d'água: logo iF da Fortes, grande, lado direito ── */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <svg
           viewBox="0 0 200 220"
           fill="none"
-          className="absolute w-[78%] max-w-[420px] opacity-[0.14] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+          style={{ opacity: 0.13 }}
+          className="absolute w-[85%] max-w-[500px] top-[-4%] right-[-18%]"
         >
-          {/* Ponto/cabeça do "i" */}
+          {/* Círculo — cabeça / ponto do "i" */}
           <circle cx="60" cy="36" r="24" fill="#DC2626"/>
-          {/* Arco esquerdo — corpo curvo do "i" */}
-          <path d="M30 82 C14 116 26 158 65 168" stroke="#DC2626" strokeWidth="20" strokeLinecap="round" fill="none"/>
-          {/* Haste vertical do "F" (levemente curvada) */}
-          <path d="M96 52 C116 92 128 138 114 188" stroke="#DC2626" strokeWidth="20" strokeLinecap="round" fill="none"/>
+          {/* Arco esquerdo curvo — corpo do "i" */}
+          <path d="M28 80 C10 118 24 162 66 172"
+            stroke="#DC2626" strokeWidth="22" strokeLinecap="round" fill="none"/>
+          {/* Haste vertical do "F" */}
+          <path d="M95 50 C118 95 130 144 115 192"
+            stroke="#DC2626" strokeWidth="22" strokeLinecap="round" fill="none"/>
           {/* Braço superior do "F" */}
-          <path d="M96 52 C124 44 148 36 170 28" stroke="#DC2626" strokeWidth="20" strokeLinecap="round" fill="none"/>
+          <path d="M95 50 C122 42 150 33 174 24"
+            stroke="#DC2626" strokeWidth="22" strokeLinecap="round" fill="none"/>
           {/* Braço do meio do "F" */}
-          <path d="M107 112 C128 105 148 100 166 96" stroke="#DC2626" strokeWidth="17" strokeLinecap="round" fill="none"/>
+          <path d="M106 110 C130 103 152 97 170 92"
+            stroke="#DC2626" strokeWidth="18" strokeLinecap="round" fill="none"/>
         </svg>
       </div>
 
-      {/* Gradiente radial vermelho nas bordas */}
+      {/* ── Gradiente inferior branco → vermelho (forte, igual referência) ── */}
       <div
-        className="absolute inset-0 pointer-events-none z-[1]"
+        className="absolute bottom-0 left-0 right-0 pointer-events-none z-[1]"
         style={{
-          background: 'radial-gradient(ellipse at 60% 50%, transparent 38%, rgba(220,38,38,0.07) 70%, rgba(220,38,38,0.13) 100%)',
+          height: '38%',
+          background: 'linear-gradient(to top, rgba(220,38,38,0.22) 0%, rgba(220,38,38,0.08) 40%, transparent 100%)',
         }}
       />
-      {/* Gradiente inferior branco → vermelho-claro */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none bg-gradient-to-t from-red-100/70 via-red-50/30 to-transparent z-[1]" />
 
       {/* Brilho de entrada */}
       <motion.div initial={{ opacity: 0, x: '-100%' }} animate={{ x: '200%', opacity: [0, 0.15, 0] }} transition={{ duration: 1.6, ease: 'easeInOut' }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent pointer-events-none z-50 transform skew-x-12" />
