@@ -140,7 +140,8 @@ const AlbumPage = ({ pageIndex, ownedStickers, onStickerClick, direction = 0, al
         <img
           src={fortesLogo}
           alt=""
-          className="absolute w-[80%] max-w-[460px] top-[2%] right-[-14%] opacity-[0.13]"
+          className="absolute w-[80%] max-w-[460px] top-[2%] right-[-14%] opacity-[0.18]"
+          style={{ mixBlendMode: 'multiply' }}
         />
       </div>
 
