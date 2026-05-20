@@ -134,29 +134,35 @@ const AlbumPage = ({ pageIndex, ownedStickers, onStickerClick, direction = 0, al
       style={{ perspective: 1200, transformOrigin: direction > 0 ? 'left center' : 'right center' }}
       className="relative bg-white w-full shadow-2xl rounded-[32px] border-2 border-slate-100 mx-auto max-w-2xl overflow-hidden"
     >
-      {/* Marca d'água Copa Fanfortes — silhueta de jogador em círculo */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {/* Logo Fortes "iF" como marca d'água */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center">
         <svg
-          className="absolute -right-10 top-1/2 -translate-y-[48%]"
-          width="480" height="560" viewBox="0 0 480 560" fill="none"
+          viewBox="0 0 200 220"
+          fill="none"
+          className="absolute w-[78%] max-w-[420px] opacity-[0.14] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
         >
-          {/* Círculo externo do badge */}
-          <circle cx="240" cy="280" r="230" fill="#DC2626" fillOpacity="0.10"/>
-          {/* Aro interno */}
-          <circle cx="240" cy="280" r="200" fill="none" stroke="#DC2626" strokeOpacity="0.07" strokeWidth="12"/>
-          {/* Cabeça */}
-          <circle cx="240" cy="160" r="72" fill="#DC2626" fillOpacity="0.13"/>
-          {/* Pescoço */}
-          <rect x="218" y="226" width="44" height="28" rx="8" fill="#DC2626" fillOpacity="0.11"/>
-          {/* Ombros / corpo */}
-          <path d="M80 290 Q120 258 240 265 Q360 258 400 290 L420 500 H60 Z" fill="#DC2626" fillOpacity="0.11"/>
-          {/* Faixa horizontal decorativa */}
-          <rect x="130" y="252" width="220" height="10" rx="5" fill="#DC2626" fillOpacity="0.08"/>
+          {/* Ponto/cabeça do "i" */}
+          <circle cx="60" cy="36" r="24" fill="#DC2626"/>
+          {/* Arco esquerdo — corpo curvo do "i" */}
+          <path d="M30 82 C14 116 26 158 65 168" stroke="#DC2626" strokeWidth="20" strokeLinecap="round" fill="none"/>
+          {/* Haste vertical do "F" (levemente curvada) */}
+          <path d="M96 52 C116 92 128 138 114 188" stroke="#DC2626" strokeWidth="20" strokeLinecap="round" fill="none"/>
+          {/* Braço superior do "F" */}
+          <path d="M96 52 C124 44 148 36 170 28" stroke="#DC2626" strokeWidth="20" strokeLinecap="round" fill="none"/>
+          {/* Braço do meio do "F" */}
+          <path d="M107 112 C128 105 148 100 166 96" stroke="#DC2626" strokeWidth="17" strokeLinecap="round" fill="none"/>
         </svg>
       </div>
 
-      {/* Gradiente inferior suave (branco → rosa-claro) */}
-      <div className="absolute bottom-0 left-0 right-0 h-28 pointer-events-none bg-gradient-to-t from-red-50 via-red-50/40 to-transparent z-[1]" />
+      {/* Gradiente radial vermelho nas bordas */}
+      <div
+        className="absolute inset-0 pointer-events-none z-[1]"
+        style={{
+          background: 'radial-gradient(ellipse at 60% 50%, transparent 38%, rgba(220,38,38,0.07) 70%, rgba(220,38,38,0.13) 100%)',
+        }}
+      />
+      {/* Gradiente inferior branco → vermelho-claro */}
+      <div className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none bg-gradient-to-t from-red-100/70 via-red-50/30 to-transparent z-[1]" />
 
       {/* Brilho de entrada */}
       <motion.div initial={{ opacity: 0, x: '-100%' }} animate={{ x: '200%', opacity: [0, 0.15, 0] }} transition={{ duration: 1.6, ease: 'easeInOut' }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent pointer-events-none z-50 transform skew-x-12" />
