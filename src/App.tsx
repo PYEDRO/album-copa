@@ -5,6 +5,7 @@ import {
   Sparkles, ArrowLeftRight, TrendingUp, LogOut,
   User, Loader2, BarChart3, ImagePlus,
 } from 'lucide-react';
+import fortesLogo from './public/fortes-logo.gif';
 import AdminDashboard from './components/AdminDashboard';
 import AdminStickerEditor from './components/AdminStickerEditor';
 import TradeSystem from './components/TradeSystem';
@@ -134,29 +135,13 @@ const AlbumPage = ({ pageIndex, ownedStickers, onStickerClick, direction = 0, al
       style={{ perspective: 1200, transformOrigin: direction > 0 ? 'left center' : 'right center' }}
       className="relative bg-white w-full shadow-2xl rounded-[32px] border-2 border-slate-100 mx-auto max-w-2xl overflow-hidden"
     >
-      {/* ── Marca d'água: logo iF da Fortes, grande, lado direito ── */}
+      {/* ── Marca d'água: logo iF oficial da Fortes ── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <svg
-          viewBox="0 0 200 220"
-          fill="none"
-          style={{ opacity: 0.13 }}
-          className="absolute w-[85%] max-w-[500px] top-[-4%] right-[-18%]"
-        >
-          {/* Círculo — cabeça / ponto do "i" */}
-          <circle cx="60" cy="36" r="24" fill="#DC2626"/>
-          {/* Arco esquerdo curvo — corpo do "i" */}
-          <path d="M28 80 C10 118 24 162 66 172"
-            stroke="#DC2626" strokeWidth="22" strokeLinecap="round" fill="none"/>
-          {/* Haste vertical do "F" */}
-          <path d="M95 50 C118 95 130 144 115 192"
-            stroke="#DC2626" strokeWidth="22" strokeLinecap="round" fill="none"/>
-          {/* Braço superior do "F" */}
-          <path d="M95 50 C122 42 150 33 174 24"
-            stroke="#DC2626" strokeWidth="22" strokeLinecap="round" fill="none"/>
-          {/* Braço do meio do "F" */}
-          <path d="M106 110 C130 103 152 97 170 92"
-            stroke="#DC2626" strokeWidth="18" strokeLinecap="round" fill="none"/>
-        </svg>
+        <img
+          src={fortesLogo}
+          alt=""
+          className="absolute w-[80%] max-w-[460px] top-[2%] right-[-14%] opacity-[0.13]"
+        />
       </div>
 
       {/* ── Gradiente inferior branco → vermelho (forte, igual referência) ── */}
