@@ -218,38 +218,28 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
   const [showAllUsers, setShowAllUsers]   = useState(false)
   const [userPage, setUserPage]           = useState(0)
 
-  // Busca usuários com figurinhas repetidas
+  // Busca usuários com figurinhas repetidas via RPC (SECURITY DEFINER — bypassa RLS)
   useEffect(() => {
     const fetchUsersWithDups = async () => {
       setLoadingUsers(true)
       try {
-        const { data } = await supabase
-          .from('user_stickers')
-          .select('user_id, sticker_id, quantity, profiles(id, name)')
-          .gt('quantity', 1)
-          .neq('user_id', userId)
+        const { data, error } = await supabase.rpc('get_users_with_duplicates', {
+          p_current_user_id: userId,
+        })
+
+        if (error) {
+          console.error('get_users_with_duplicates error:', error)
+          return
+        }
 
         if (data) {
-          const byUser = new Map<string, UserWithDups>()
-          for (const row of data as any[]) {
-            const uid     = row.user_id
-            const profile = row.profiles
-            if (!byUser.has(uid)) {
-              byUser.set(uid, {
-                id: uid,
-                name: profile?.name ?? 'Jogador',
-                duplicateCount: 0,
-                stickerIds: [],
-              })
-            }
-            const u = byUser.get(uid)!
-            u.duplicateCount += (row.quantity as number) - 1
-            u.stickerIds.push(row.sticker_id)
-          }
           setUsersWithDups(
-            Array.from(byUser.values())
-              .filter(u => u.duplicateCount >= 1)
-              .sort((a, b) => b.duplicateCount - a.duplicateCount),
+            (data as any[]).map(row => ({
+              id:             row.user_id,
+              name:           row.user_name ?? 'Jogador',
+              duplicateCount: Number(row.duplicate_count),
+              stickerIds:     row.sticker_ids ?? [],
+            })),
           )
         }
       } finally {
