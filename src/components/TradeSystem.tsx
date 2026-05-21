@@ -151,7 +151,7 @@ const TradeCard: React.FC<TradeCardProps> = ({
 const UserDupCard: React.FC<{
   user: UserWithDups
   allStickers: DbSticker[]
-  onPropose: (userId: string) => void
+  onPropose: (userId: string, stickerIds: string[]) => void
 }> = ({ user, allStickers, onPropose }) => {
   const thumbIds = user.stickerIds.slice(0, 4)
 
@@ -189,7 +189,7 @@ const UserDupCard: React.FC<{
 
         {/* Botão seta */}
         <button
-          onClick={() => onPropose(user.id)}
+          onClick={() => onPropose(user.id, user.stickerIds)}
           className="w-8 h-8 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center flex-shrink-0 transition-all shadow-md hover:scale-110 active:scale-95"
         >
           <ChevronRight size={16} />
@@ -205,12 +205,13 @@ const USERS_PER_PAGE = 3
 export default function TradeSystem({ userId, userStickers, allStickers, tradesHook }: Props) {
   const { trades, acting, error, acceptTrade, updateTradeStatus } = tradesHook
 
-  const [showPropose, setShowPropose]     = useState(false)
-  const [toUserId, setToUserId]           = useState('')
-  const [offered, setOffered]             = useState<string[]>([])
-  const [requested, setRequested]         = useState<string[]>([])
-  const [proposing, setProposing]         = useState(false)
-  const [copied, setCopied]               = useState(false)
+  const [showPropose, setShowPropose]         = useState(false)
+  const [toUserId, setToUserId]               = useState('')
+  const [offered, setOffered]                 = useState<string[]>([])
+  const [requested, setRequested]             = useState<string[]>([])
+  const [proposing, setProposing]             = useState(false)
+  const [copied, setCopied]                   = useState(false)
+  const [targetDuplicateIds, setTargetDuplicateIds] = useState<string[]>([]) // repetidas do alvo
 
   // Usuários com duplicatas
   const [usersWithDups, setUsersWithDups] = useState<UserWithDups[]>([])
@@ -271,10 +272,22 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
     setProposing(false)
   }
 
-  // Abre modal de proposta pré-preenchido com o ID do usuário
-  const startTradeWith = (targetUserId: string) => {
+  // Abre modal pré-preenchido com ID + filtra só as repetidas do alvo
+  const startTradeWith = (targetUserId: string, duplicateStickerIds: string[] = []) => {
     setToUserId(targetUserId)
+    setTargetDuplicateIds(duplicateStickerIds)
+    setRequested([])
+    setOffered([])
     setShowPropose(true)
+  }
+
+  // Ao fechar o modal, limpa o filtro de repetidas
+  const closePropose = () => {
+    setShowPropose(false)
+    setTargetDuplicateIds([])
+    setToUserId('')
+    setOffered([])
+    setRequested([])
   }
 
   const pendingReceived = trades.filter(t => t.to_user_id === userId && t.status === 'pending')
@@ -433,7 +446,7 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
                   key={user.id}
                   user={user}
                   allStickers={allStickers}
-                  onPropose={startTradeWith}
+                  onPropose={(uid, ids) => startTradeWith(uid, ids)}
                 />
               ))}
             </motion.div>
@@ -464,7 +477,7 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setShowPropose(false)}
+              onClick={closePropose}
               className="absolute inset-0 bg-red-950/40 backdrop-blur-md"
             />
             <motion.div
@@ -475,7 +488,7 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-2xl font-black italic uppercase text-red-600">Nova Troca</h3>
-                <button onClick={() => setShowPropose(false)} className="text-slate-400 hover:text-slate-600">
+                <button onClick={closePropose} className="text-slate-400 hover:text-slate-600">
                   <X size={24} />
                 </button>
               </div>
@@ -518,9 +531,17 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
                     Você quer (do outro jogador)
+                    {targetDuplicateIds.length > 0 && (
+                      <span className="ml-2 normal-case text-[9px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">
+                        só repetidas disponíveis
+                      </span>
+                    )}
                   </label>
                   <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100">
-                    {allStickers.map(s => (
+                    {(targetDuplicateIds.length > 0
+                      ? allStickers.filter(s => targetDuplicateIds.includes(s.id))
+                      : allStickers
+                    ).map(s => (
                       <button key={s.id}
                         onClick={() => toggleSticker(s.id, requested, setRequested)}
                         className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all border-2 ${
