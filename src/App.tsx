@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Book, Gamepad2, Package, Search, Trophy, ChevronRight, ChevronLeft,
-  Sparkles, ArrowLeftRight, TrendingUp, LogOut,
+  Sparkles, ArrowLeftRight, TrendingUp, LogOut, RefreshCw,
   User, Loader2, BarChart3, ImagePlus,
 } from 'lucide-react';
 import fortesLogo from './public/fortes-logo.png';
@@ -210,11 +210,19 @@ const AlbumPage = ({ pageIndex, ownedStickers, onStickerClick, direction = 0, al
   );
 };
 
-const RankingSection = ({ leaderboard, currentUserId }: { leaderboard: DbLeaderboardEntry[]; currentUserId?: string; }) => (
+const RankingSection = ({ leaderboard, currentUserId, onForceRefresh, refreshing }: { leaderboard: DbLeaderboardEntry[]; currentUserId?: string; onForceRefresh: () => void; refreshing: boolean; }) => (
   <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto space-y-8">
     <div className="text-center space-y-2">
       <h2 className="text-4xl font-black italic uppercase text-red-600 tracking-tighter">Ranking de Colecionadores</h2>
       <p className="text-slate-400 font-medium">Quem está mais perto de completar o álbum Fanfortes?</p>
+      <button
+        onClick={onForceRefresh}
+        disabled={refreshing}
+        className="mx-auto flex items-center gap-2 px-4 py-2 rounded-full bg-red-600 text-white text-xs font-black uppercase tracking-wider hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+      >
+        <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+        {refreshing ? 'Atualizando...' : 'Atualizar Ranking'}
+      </button>
     </div>
     <div className="bg-slate-50 rounded-[40px] border-4 border-red-100 p-8 shadow-inner">
       {leaderboard.length === 0 ? (
@@ -230,7 +238,7 @@ const RankingSection = ({ leaderboard, currentUserId }: { leaderboard: DbLeaderb
               <div key={entry.user_id} className={`flex items-center justify-between p-4 rounded-2xl transition-all ${isSelf ? 'bg-red-600 text-white shadow-xl scale-105' : 'bg-white border border-slate-100'}`}>
                 <div className="flex items-center gap-4 md:gap-6">
                   <span className={`text-xl font-black italic w-8 ${isSelf ? 'text-white' : 'text-red-600'}`}>#{i + 1}</span>
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(entry.name)}`} alt={entry.name} className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-slate-200 bg-slate-50" />
+                  <img src={entry.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(entry.name)}`} alt={entry.name} className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-slate-200 bg-slate-50 object-cover" referrerPolicy="no-referrer" />
                   <span className={`font-black uppercase tracking-tighter text-sm md:text-base ${isSelf ? 'text-white' : 'text-slate-800'}`}>{entry.name}{isSelf && <span className="ml-2 text-[9px] opacity-70">(você)</span>}</span>
                 </div>
                 <div className="flex flex-col items-end">
@@ -255,7 +263,7 @@ interface GameState { target: Collaborator | null; attemptsRemaining: number; op
 export default function App() {
   const auth = useAuth();
   const packs = usePacks(auth.user?.id);
-  const { entries: leaderboard, refetch: refetchLeaderboard } = useLeaderboard();
+  const { entries: leaderboard, refetch: refetchLeaderboard, forceRefresh: forceRefreshLeaderboard, refreshing: leaderboardRefreshing } = useLeaderboard();
   const tradesHook = useTrades(auth.user?.id);
   const [showSplash, setShowSplash] = useState(true);
   const [view, setView] = useState<'album'|'game'|'opening'|'ranking'|'trading'|'admin-dashboard'|'admin-stickers'>('album');
@@ -281,11 +289,12 @@ export default function App() {
   useEffect(() => { localStorage.setItem('game_stats', JSON.stringify(localGameStats)); }, [localGameStats]);
 
   const allCollaborators = useMemo((): Collaborator[] => {
-    const constantIds = new Set(COLLABORATORS.map(c => c.id));
-    const dbExtras = packs.stickers
-      .filter(s => !constantIds.has(s.id))
-      .map(toCollaborator);
-    return [...COLLABORATORS, ...dbExtras];
+    const dbById = new Map(packs.stickers.map(s => [s.id, toCollaborator(s)]));
+    // DB takes priority over static constants for matching IDs
+    const merged = COLLABORATORS.map(c => dbById.get(c.id) ?? c);
+    const staticIds = new Set(COLLABORATORS.map(c => c.id));
+    const extras = packs.stickers.filter(s => !staticIds.has(s.id)).map(toCollaborator);
+    return [...merged, ...extras];
   }, [packs.stickers]);
 
   const TOTAL_PAGES = Math.ceil(allCollaborators.length / STICKERS_PER_PAGE);
@@ -465,7 +474,7 @@ export default function App() {
 
           {view === 'ranking' && (
             <motion.div key="ranking" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-              <RankingSection leaderboard={leaderboard} currentUserId={auth.user.id} />
+              <RankingSection leaderboard={leaderboard} currentUserId={auth.user.id} onForceRefresh={forceRefreshLeaderboard} refreshing={leaderboardRefreshing} />
             </motion.div>
           )}
 
