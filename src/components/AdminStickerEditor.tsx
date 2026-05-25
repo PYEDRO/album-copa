@@ -225,8 +225,14 @@ export default function AdminStickerEditor() {
 
   useEffect(() => { fetchStickers() }, [fetchStickers])
 
+  const nextAutoId = (): string => {
+    const numericIds = stickers.map(s => parseInt(s.id, 10)).filter(n => !isNaN(n))
+    const max = numericIds.length > 0 ? Math.max(...numericIds) : 0
+    return String(max + 1)
+  }
+
   const openCreate = () => {
-    setForm(emptyForm())
+    setForm({ ...emptyForm(), id: nextAutoId() })
     setEditingId(null)
     setImageFile(null)
     setImagePreview(null)
@@ -465,10 +471,13 @@ export default function AdminStickerEditor() {
                 <div className="grid grid-cols-2 gap-4">
                   {!editingId && (
                     <div className="col-span-2">
-                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">ID *</label>
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">
+                        ID <span className="text-emerald-500 normal-case font-bold tracking-normal">· preenchido automaticamente</span>
+                      </label>
                       <input required value={form.id ?? ''} onChange={e => setForm(f => ({ ...f, id: e.target.value }))}
-                        placeholder="Ex: s001 ou deixe em branco para gerar"
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                        placeholder="ID gerado automaticamente"
+                        className="w-full border border-emerald-200 bg-emerald-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 text-emerald-800 font-bold" />
+                      <p className="text-[9px] text-slate-400 mt-1">Você pode alterar o ID manualmente se necessário.</p>
                     </div>
                   )}
                   <div className="col-span-2">
