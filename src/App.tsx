@@ -94,23 +94,17 @@ const AlbumCard = ({ collaborator, globalIndex, isCollected, onClick }: {
 }) => {
   if (!isCollected) {
     return (
-      <div className="flex flex-col gap-1.5">
-        <div className="w-full aspect-[3/4] bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center select-none">
-          <span className="text-2xl md:text-3xl font-black italic text-slate-300">{globalIndex + 1}</span>
-        </div>
-        <p className="text-[7px] md:text-[8px] font-black uppercase tracking-tight text-center text-slate-600 truncate px-0.5 leading-tight">{collaborator.name}</p>
+      <div className="w-full aspect-[3/4] bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex items-center justify-center select-none">
+        <span className="text-2xl md:text-3xl font-black italic text-slate-300">{globalIndex + 1}</span>
       </div>
     );
   }
   return (
-    <div className="flex flex-col gap-1.5 cursor-pointer group" onClick={onClick}>
-      <div className="w-full aspect-[3/4] bg-white border-[3px] border-red-500 rounded-2xl overflow-hidden relative shadow-md group-hover:shadow-xl transition-shadow">
-        <img src={collaborator.imageUrl} alt={collaborator.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
-        <div className="absolute top-1.5 right-1.5 bg-red-600/80 backdrop-blur-sm rounded-md px-1 py-0.5">
-          <span className="text-[6px] font-black text-white leading-none">{globalIndex + 1}</span>
-        </div>
+    <div className="w-full aspect-[3/4] bg-white border-[3px] border-red-500 rounded-2xl overflow-hidden relative shadow-md cursor-pointer group hover:shadow-xl transition-shadow" onClick={onClick}>
+      <img src={collaborator.imageUrl} alt={collaborator.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
+      <div className="absolute top-1.5 right-1.5 bg-red-600/80 backdrop-blur-sm rounded-md px-1 py-0.5">
+        <span className="text-[6px] font-black text-white leading-none">{globalIndex + 1}</span>
       </div>
-      <p className="text-[7px] md:text-[8px] font-black uppercase tracking-tight text-center text-slate-800 truncate px-0.5 leading-tight">{collaborator.name}</p>
     </div>
   );
 };
@@ -359,7 +353,7 @@ export default function App() {
       setView('game'); return;
     }
     setGameReward(null);
-    const pool = allCollaborators.length > 0 ? allCollaborators : COLLABORATORS;
+    const pool = packs.stickers.length > 0 ? packs.stickers.map(toCollaborator) : allCollaborators;
     const target = pool[Math.floor(Math.random() * pool.length)];
     const opts = [target];
     while (opts.length < 4) { const o = pool[Math.floor(Math.random() * pool.length)]; if (!opts.find(x => x.id === o.id)) opts.push(o); }
