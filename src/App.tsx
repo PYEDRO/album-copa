@@ -115,9 +115,9 @@ const AlbumCard = ({ collaborator, globalIndex, isCollected, onClick }: {
   );
 };
 
-const AlbumPage = ({ pageIndex, ownedStickers, onStickerClick, direction = 0, allStickers }: {
+const AlbumPage = ({ pageIndex, ownedStickers, onStickerClick, direction = 0, allStickers, zoom = 100 }: {
   pageIndex: number; ownedStickers: string[]; onStickerClick: (c: Collaborator) => void;
-  direction?: number; allStickers: Collaborator[]; key?: any;
+  direction?: number; allStickers: Collaborator[]; key?: any; zoom?: number;
 }) => {
   const startIdx = pageIndex * STICKERS_PER_PAGE;
   const pageStickers = allStickers.slice(startIdx, startIdx + STICKERS_PER_PAGE);
@@ -132,8 +132,8 @@ const AlbumPage = ({ pageIndex, ownedStickers, onStickerClick, direction = 0, al
       initial={{ opacity: 0, x: direction > 0 ? 100 : -100, rotateY: direction > 0 ? 45 : -45, scale: 0.95 }}
       animate={{ opacity: 1, x: 0, rotateY: 0, scale: 1, transition: { type: 'spring', stiffness: 40, damping: 20, mass: 1.5 } }}
       exit={{ opacity: 0, x: direction > 0 ? -100 : 100, rotateY: direction > 0 ? -45 : 45, scale: 0.95, transition: { duration: 0.8, ease: 'easeInOut' } }}
-      style={{ perspective: 1200, transformOrigin: direction > 0 ? 'left center' : 'right center' }}
-      className="relative bg-white w-full shadow-2xl rounded-[32px] border-2 border-slate-100 mx-auto max-w-2xl overflow-hidden"
+      style={{ perspective: 1200, transformOrigin: direction > 0 ? 'left center' : 'right center', maxWidth: `${(42 * zoom) / 100}rem` }}
+      className="relative bg-white w-full shadow-2xl rounded-[32px] border-2 border-slate-100 mx-auto overflow-hidden"
     >
       {/* ── Marca d'água: logo iF oficial da Fortes ── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -269,6 +269,7 @@ export default function App() {
   const [view, setView] = useState<'album'|'game'|'opening'|'ranking'|'trading'|'admin-dashboard'|'admin-stickers'>('album');
   const [currentPage, setCurrentPage] = useState(0);
   const [direction, setDirection] = useState(0);
+  const [albumZoom, setAlbumZoom] = useState(100);
   const [activePack, setActivePack] = useState<Collaborator[]>([]);
   const [selectedSticker, setSelectedSticker] = useState<Collaborator | null>(null);
   const [localGameStats, setLocalGameStats] = useState<LocalGameStats>(() => {
@@ -457,9 +458,30 @@ export default function App() {
                 </div>
               ) : (
                 <div className="space-y-8 pb-12">
-                  <div className="flex justify-center max-w-3xl mx-auto relative overflow-visible">
+                  {/* Controle de zoom do álbum */}
+                  <div className="flex items-center justify-end gap-2 max-w-3xl mx-auto">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tamanho</span>
+                    <button
+                      onClick={() => setAlbumZoom(z => Math.max(50, z - 10))}
+                      disabled={albumZoom <= 50}
+                      className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-slate-600 font-black text-sm flex items-center justify-center transition-colors"
+                    >−</button>
+                    <span className="text-xs font-black text-slate-700 w-10 text-center">{albumZoom}%</span>
+                    <button
+                      onClick={() => setAlbumZoom(z => Math.min(150, z + 10))}
+                      disabled={albumZoom >= 150}
+                      className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-slate-600 font-black text-sm flex items-center justify-center transition-colors"
+                    >+</button>
+                    {albumZoom !== 100 && (
+                      <button
+                        onClick={() => setAlbumZoom(100)}
+                        className="text-[9px] font-black uppercase tracking-wide text-red-500 hover:text-red-700 px-2 py-1 rounded-full border border-red-200 hover:border-red-400 transition-colors"
+                      >↺ Padrão</button>
+                    )}
+                  </div>
+                  <div className="flex justify-center mx-auto relative overflow-visible">
                     <AnimatePresence mode="wait" custom={direction}>
-                      <AlbumPage key={currentPage} pageIndex={currentPage} ownedStickers={packs.ownedIds} onStickerClick={setSelectedSticker} direction={direction} allStickers={allCollaborators} />
+                      <AlbumPage key={currentPage} pageIndex={currentPage} ownedStickers={packs.ownedIds} onStickerClick={setSelectedSticker} direction={direction} allStickers={allCollaborators} zoom={albumZoom} />
                     </AnimatePresence>
                   </div>
                   <div className="flex items-center justify-center gap-12 pt-12">
