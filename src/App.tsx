@@ -534,7 +534,7 @@ export default function App() {
                         <div className="bg-white p-4 rounded-2xl border border-red-100 text-left shadow-sm"><p className="text-red-400 font-black text-[10px] mb-1 uppercase tracking-widest">✨ RARIDADE</p><p className="text-red-600 font-black italic text-xl uppercase tracking-tighter">{gameState.target.rarity}</p></div>
                       </div>
                       <div className="space-y-4">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Memória do Log</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Talentos Ocultos</p>
                         <p className="text-xl italic text-slate-600 font-serif leading-relaxed font-light border-l-4 border-red-600 pl-6">"{gameState.target.bio}"</p>
                       </div>
                       <div className="pt-8 space-y-6">
