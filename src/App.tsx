@@ -250,8 +250,10 @@ const RankingSection = ({ leaderboard, currentUserId, onForceRefresh, refreshing
 
 
 const MAX_GUESSES_PER_DAY = 3;
+// Altere esta chave para resetar as partidas diárias de todos os usuários
+const GAME_RESET_KEY = '2026-05-26-v1';
 
-interface LocalGameStats { guessesRight: number; guessesTotal: number; lastGuessDate: string | null; dailyGuessCount: number; }
+interface LocalGameStats { guessesRight: number; guessesTotal: number; lastGuessDate: string | null; dailyGuessCount: number; resetKey?: string; }
 interface GameState { target: Collaborator | null; attemptsRemaining: number; options: Collaborator[]; feedback: string | null; won: boolean; canPlay: boolean; }
 
 export default function App() {
@@ -270,9 +272,14 @@ export default function App() {
     try {
       const s = localStorage.getItem('game_stats');
       const parsed = s ? JSON.parse(s) : {};
-      return { guessesRight: 0, guessesTotal: 0, lastGuessDate: null, dailyGuessCount: 0, ...parsed };
+      const base = { guessesRight: 0, guessesTotal: 0, lastGuessDate: null, dailyGuessCount: 0, ...parsed };
+      // Se a chave de reset mudou, zera o contador diário
+      if (base.resetKey !== GAME_RESET_KEY) {
+        return { ...base, dailyGuessCount: 0, lastGuessDate: null, resetKey: GAME_RESET_KEY };
+      }
+      return base;
     }
-    catch { return { guessesRight: 0, guessesTotal: 0, lastGuessDate: null, dailyGuessCount: 0 }; }
+    catch { return { guessesRight: 0, guessesTotal: 0, lastGuessDate: null, dailyGuessCount: 0, resetKey: GAME_RESET_KEY }; }
   });
 
   // ── Pack status vem do servidor via usePacks ─────────────────
