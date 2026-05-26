@@ -1,7 +1,7 @@
 /**
  * Edge Function: claim-game-reward
- * Concede 1 figurinha não possuída ao jogador que acertou no jogo do dia.
- * Limite: 1 recompensa por dia por usuário.
+ * Concede 1 figurinha não possuída ao jogador que acertou no jogo.
+ * Uma recompensa por vitória (sem limite diário).
  * A figurinha é sempre nova (não possuída no álbum).
  */
 
@@ -52,27 +52,6 @@ Deno.serve(async (req: Request) => {
       return errorResponse(401, 'Unauthorized')
     }
 
-    // ── Verifica se já resgatou a recompensa hoje ─────────────
-    const today = new Date().toISOString().split('T')[0]
-
-    const { count, error: countError } = await supabaseAdmin
-      .from('game_claims')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('claim_date', today)
-
-    if (countError) {
-      console.error('game_claims count error:', countError)
-      return errorResponse(500, 'Failed to check game reward status')
-    }
-
-    if ((count ?? 0) > 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'GAME_REWARD_ALREADY_CLAIMED' }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
-    }
-
     // ── Busca catálogo completo ───────────────────────────────
     const { data: allStickers, error: stickerError } = await supabaseAdmin
       .from('stickers')
@@ -110,12 +89,6 @@ Deno.serve(async (req: Request) => {
     })
 
     if (rpcError) {
-      if (rpcError.message?.includes('GAME_REWARD_ALREADY_CLAIMED')) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'GAME_REWARD_ALREADY_CLAIMED' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        )
-      }
       console.error('RPC error:', rpcError)
       return errorResponse(500, 'Transaction failed')
     }
