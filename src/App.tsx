@@ -278,6 +278,8 @@ export default function App() {
   // ── Pack status vem do servidor via usePacks ─────────────────
   const packsRemaining = packs.packsRemaining;
   const [gameState, setGameState] = useState<GameState>({ target: null, attemptsRemaining: 2, options: [], feedback: null, won: false, canPlay: true });
+  const [gameReward, setGameReward] = useState<DbSticker | null>(null);
+  const [gameRewardClaiming, setGameRewardClaiming] = useState(false);
 
   useEffect(() => { localStorage.setItem('game_stats', JSON.stringify(localGameStats)); }, [localGameStats]);
 
@@ -315,6 +317,33 @@ export default function App() {
     refetchLeaderboard();
   };
 
+  const claimGameReward = useCallback(async (): Promise<DbSticker | null> => {
+    if (!auth.user) return null;
+    setGameRewardClaiming(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const res = await fetch(`${supabaseUrl}/functions/v1/claim-game-reward`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const json = await res.json();
+      if (res.ok && json.success && json.sticker) {
+        await packs.refetchInventory();
+        return json.sticker as DbSticker;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      setGameRewardClaiming(false);
+    }
+  }, [auth.user, packs]);
+
   const startNewGame = () => {
     const today = new Date().toISOString().split('T')[0];
     const isToday = localGameStats.lastGuessDate === today;
@@ -323,6 +352,7 @@ export default function App() {
       setGameState(p => ({ ...p, feedback: `Você já jogou ${MAX_GUESSES_PER_DAY} vezes hoje! Volte amanhã.`, canPlay: false }));
       setView('game'); return;
     }
+    setGameReward(null);
     const pool = packs.stickers.length > 0 ? packs.stickers.map(toCollaborator) : allCollaborators;
     const target = pool[Math.floor(Math.random() * pool.length)];
     const opts = [target];
@@ -340,6 +370,8 @@ export default function App() {
         const isToday = p.lastGuessDate === today;
         return { ...p, guessesRight: p.guessesRight + 1, guessesTotal: p.guessesTotal + 1, lastGuessDate: today, dailyGuessCount: (isToday ? (p.dailyGuessCount ?? 0) : 0) + 1 };
       });
+      setGameReward(null);
+      claimGameReward().then(sticker => { if (sticker) setGameReward(sticker); });
     } else {
       const rem = gameState.attemptsRemaining - 1;
       setGameState(p => ({ ...p, attemptsRemaining: rem, feedback: rem > 0 ? 'Tente novamente! Analise bem a bio e os atributos.' : `Era ${gameState.target?.name}!` }));
@@ -516,6 +548,22 @@ export default function App() {
                         </div>
                         {gameState.feedback && (
                           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className={`p-5 rounded-2xl text-center font-black italic uppercase text-xs border-2 tracking-widest ${gameState.won ? 'bg-emerald-600 border-emerald-700 text-white shadow-lg' : 'bg-red-50 border-red-100 text-red-600'}`}>{gameState.feedback}</motion.div>
+                        )}
+                        {gameState.won && (
+                          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="p-5 bg-amber-50 border-2 border-amber-200 rounded-2xl text-center space-y-3">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Recompensa de Vitória</p>
+                            {gameRewardClaiming ? (
+                              <div className="flex items-center justify-center gap-2 text-amber-600"><Loader2 size={20} className="animate-spin" /><span className="text-xs font-black italic uppercase">Buscando figurinha...</span></div>
+                            ) : gameReward ? (
+                              <div className="flex flex-col items-center gap-2">
+                                <p className="text-xs font-black italic uppercase text-amber-600">Nova figurinha desbloqueada!</p>
+                                <div className="w-28 mx-auto"><StickerCard collaborator={toCollaborator(gameReward)} /></div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">{gameReward.name}</span>
+                              </div>
+                            ) : (
+                              <p className="text-[10px] italic text-amber-500">Recompensa já coletada hoje ou álbum completo.</p>
+                            )}
+                          </motion.div>
                         )}
                         <div className="flex items-center justify-between pt-6">
                           <div className="flex gap-2">{[...Array(2)].map((_, i) => (<div key={i} className={`w-3 h-3 rounded-full ${i < gameState.attemptsRemaining ? 'bg-red-600 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-slate-200'}`} />))}</div>
