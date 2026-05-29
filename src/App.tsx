@@ -70,7 +70,7 @@ const StickerCard = ({ collaborator, isCollected = true, onClick }: { collaborat
             <img src={collaborator.imageUrl} alt={collaborator.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
           <div className="flex flex-col gap-0 mb-0.5 min-h-0">
-            <h3 className={`text-[7px] font-black uppercase tracking-tighter truncate leading-tight ${isRare ? 'text-amber-900' : 'text-slate-800'}`}>{collaborator.name}</h3>
+            <h3 className={`text-[9px] font-black uppercase tracking-tighter truncate leading-tight ${isRare ? 'text-amber-900' : 'text-slate-800'}`}>{collaborator.name}</h3>
             <p className={`text-[5px] font-bold uppercase leading-none truncate ${isRare ? 'text-amber-600' : 'text-slate-300'}`}>{collaborator.role}</p>
           </div>
           <div className="mt-auto pt-0.5 border-t border-slate-100/10">
@@ -81,8 +81,11 @@ const StickerCard = ({ collaborator, isCollected = true, onClick }: { collaborat
           </div>
         </div>
       </motion.div>
-      <div className="text-center px-0.5">
+      <div className="text-center px-0.5 space-y-0.5">
         <p className="text-[7px] font-black uppercase italic tracking-tighter text-slate-800 group-hover:text-red-600 transition-colors truncate">{collaborator.name}</p>
+        {collaborator.bio && (
+          <p className="text-[6px] text-slate-500 leading-tight" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{collaborator.bio}</p>
+        )}
       </div>
     </div>
   );

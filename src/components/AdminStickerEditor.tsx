@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   ImagePlus, Plus, Pencil, Trash2, Save, X, Loader2,
-  Sparkles, ChevronLeft,
+  Sparkles, ChevronLeft, Check, ZoomIn,
 } from 'lucide-react'
 import { supabase, type DbSticker } from '../lib/supabase'
 import { useAdmin } from '../hooks/useAdmin'
@@ -32,12 +32,10 @@ const StickerPreview = ({ form }: { form: Partial<DbSticker> }) => {
                      : 'border-slate-200 bg-white'}`}
     >
       <div className="flex flex-col h-full p-1.5 gap-0.5">
-        {/* team / id row */}
         <div className="flex justify-between text-[5px] font-black uppercase opacity-60 px-0.5">
           <span>{(form.team ?? 'Time')}</span>
           <span>#{form.id || '?'}</span>
         </div>
-        {/* image */}
         <div className={`relative flex-1 rounded overflow-hidden border
           ${isRare ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}
         >
@@ -49,7 +47,6 @@ const StickerPreview = ({ form }: { form: Partial<DbSticker> }) => {
             </div>
           )}
         </div>
-        {/* name / role */}
         <div>
           <p className="text-[7px] font-black uppercase truncate text-slate-800 leading-tight">
             {form.name || 'Nome'}
@@ -59,7 +56,6 @@ const StickerPreview = ({ form }: { form: Partial<DbSticker> }) => {
             {form.role || 'Função'}
           </p>
         </div>
-        {/* raridade */}
         <div className={`mt-auto border-t pt-0.5 ${isRare ? 'border-amber-100' : 'border-slate-100'}`}>
           <div className="flex justify-center text-[4px] uppercase font-black">
             <span className={isRare ? 'text-amber-600' : 'text-slate-400'}>
@@ -114,78 +110,213 @@ const AchievementInput = ({
   )
 }
 
-// ── Face crop via Canvas ──────────────────────────────────────
-/**
- * Recorta a imagem em retrato 3:4 (400×533 px) com foco inteligente no rosto.
- *
- * Estratégia:
- * 1. Centraliza horizontalmente (rosto tende a estar no centro X).
- * 2. Para imagens paisagem: usa apenas a metade superior da foto
- *    (ex.: foto de corpo inteiro — fica com tronco + cabeça).
- * 3. Para imagens retrato/quadradas: começa no topo com pequeno offset
- *    para preservar a testa, mas usa no máximo os 70% superiores da altura.
- * 4. Zoom adicional de 15% para aproximar mais do rosto.
- */
-async function cropToFace(file: File): Promise<File> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    const objectUrl = URL.createObjectURL(file)
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl)
-      const { naturalWidth: w, naturalHeight: h } = img
-      const TARGET_ASPECT = 3 / 4 // portrait
-      const OUT_W = 400
-      const OUT_H = Math.round(OUT_W / TARGET_ASPECT) // 533
+// ── ImageCropper — editor interativo de recorte ──────────────
+const CROP_W = 270  // px exibidos no editor (proporção 3:4)
+const CROP_H = 360
 
-      let srcX: number, srcY: number, srcW: number, srcH: number
+interface CropperProps {
+  file: File
+  onConfirm: (croppedFile: File) => void
+  onCancel: () => void
+}
 
-      // Zoom factor: quanto menor, mais próximo do rosto (1.0 = sem zoom)
-      const ZOOM = 0.82 // ~18% de zoom no rosto
+const ImageCropper: React.FC<CropperProps> = ({ file, onConfirm, onCancel }) => {
+  const [zoom, setZoom] = useState(1)
+  const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const [imgNat, setImgNat] = useState({ w: 1, h: 1 })
+  const [applying, setApplying] = useState(false)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const dragOrigin = useRef({ sx: 0, sy: 0, ox: 0, oy: 0 })
 
-      if (w / h > TARGET_ASPECT) {
-        // Imagem mais larga (paisagem / widescreen):
-        // Usa apenas a porção superior (onde está o rosto) com zoom
-        const usableH = Math.round(h * ZOOM)
-        srcH = usableH
-        srcW = Math.round(usableH * TARGET_ASPECT)
-        // Centraliza horizontalmente
-        srcX = Math.round((w - srcW) / 2)
-        // Começa um pouco abaixo do topo para não cortar a cabeça
-        const topOffset = Math.round(h * 0.03)
-        srcY = Math.min(topOffset, Math.max(0, h - srcH))
-      } else {
-        // Imagem mais alta ou quadrada (selfie, foto corporativa):
-        // Usa porção do topo com zoom, centrando horizontalmente
-        srcW = Math.round(w * ZOOM)
-        srcH = Math.round(srcW / TARGET_ASPECT)
-        // Centraliza horizontalmente
-        srcX = Math.round((w - srcW) / 2)
-        // Inicia com offset de 3% do topo para preservar a testa
-        const topOffset = Math.round(h * 0.03)
-        srcY = Math.min(topOffset, Math.max(0, h - srcH))
-      }
+  const imgUrl = useMemo(() => URL.createObjectURL(file), [file])
+  useEffect(() => () => URL.revokeObjectURL(imgUrl), [imgUrl])
 
-      const canvas = document.createElement('canvas')
-      canvas.width  = OUT_W
-      canvas.height = OUT_H
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, OUT_W, OUT_H)
+  // Escala base: cabe a imagem dentro do frame (fit)
+  const baseScale = Math.min(CROP_W / imgNat.w, CROP_H / imgNat.h)
+  // Zoom mínimo: imagem precisa cobrir o frame inteiro (cover)
+  const coverScale = Math.max(CROP_W / imgNat.w, CROP_H / imgNat.h)
+  const minZoom = imgNat.w > 1 ? coverScale / baseScale : 1
+  const maxZoom = minZoom * 3
 
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) { resolve(file); return }
-          const croppedFile = new File([blob], file.name.replace(/\.[^.]+$/, '') + '_cropped.jpg', {
-            type: 'image/jpeg',
-          })
-          resolve(croppedFile)
-        },
-        'image/jpeg',
-        0.92,
+  const dispW = imgNat.w * baseScale * zoom
+  const dispH = imgNat.h * baseScale * zoom
+
+  // Limita offset para a imagem sempre cobrir o frame
+  const maxOX = Math.max(0, (dispW - CROP_W) / 2)
+  const maxOY = Math.max(0, (dispH - CROP_H) / 2)
+  const ox = Math.max(-maxOX, Math.min(maxOX, offset.x))
+  const oy = Math.max(-maxOY, Math.min(maxOY, offset.y))
+
+  const imgLeft = CROP_W / 2 - dispW / 2 + ox
+  const imgTop  = CROP_H / 2 - dispH / 2 + oy
+
+  const onLoad = () => {
+    const img = imgRef.current!
+    const { naturalWidth: w, naturalHeight: h } = img
+    setImgNat({ w, h })
+    // Inicia com cover zoom e sem offset
+    const bs = Math.min(CROP_W / w, CROP_H / h)
+    const cs = Math.max(CROP_W / w, CROP_H / h)
+    setZoom(cs / bs)
+    setOffset({ x: 0, y: 0 })
+  }
+
+  const startDrag = (cx: number, cy: number) => {
+    setDragging(true)
+    dragOrigin.current = { sx: cx, sy: cy, ox, oy }
+  }
+
+  const moveDrag = (cx: number, cy: number) => {
+    if (!dragging) return
+    const { sx, sy, ox: sox, oy: soy } = dragOrigin.current
+    setOffset({ x: sox + (cx - sx), y: soy + (cy - sy) })
+  }
+
+  const stopDrag = () => setDragging(false)
+
+  const handleZoomChange = (v: number) => {
+    // Ao mudar zoom via slider, recentra o offset
+    setZoom(v)
+    setOffset({ x: 0, y: 0 })
+  }
+
+  const handleConfirm = () => {
+    setApplying(true)
+    const img = imgRef.current!
+    const scale = baseScale * zoom
+
+    // Converte coordenadas do frame para coordenadas da imagem original
+    const srcX = Math.max(0, (0 - imgLeft) / scale)
+    const srcY = Math.max(0, (0 - imgTop) / scale)
+    const srcW = Math.min(CROP_W / scale, imgNat.w - srcX)
+    const srcH = Math.min(CROP_H / scale, imgNat.h - srcY)
+
+    const canvas = document.createElement('canvas')
+    canvas.width  = 400   // saída final 3:4
+    canvas.height = 533
+    const ctx = canvas.getContext('2d')!
+    ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, 400, 533)
+
+    canvas.toBlob(blob => {
+      if (!blob) { onCancel(); return }
+      const cropped = new File(
+        [blob],
+        file.name.replace(/\.[^.]+$/, '') + '_cropped.jpg',
+        { type: 'image/jpeg' },
       )
-    }
-    img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file) }
-    img.src = objectUrl
-  })
+      onConfirm(cropped)
+    }, 'image/jpeg', 0.92)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.92, opacity: 0 }}
+        className="bg-white rounded-2xl p-6 shadow-2xl w-full max-w-sm space-y-5"
+      >
+        {/* Header */}
+        <div>
+          <h4 className="text-lg font-black uppercase tracking-tighter text-slate-800">Ajustar Imagem</h4>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Arraste para reposicionar · Slider para zoom
+          </p>
+        </div>
+
+        {/* Crop frame interativo */}
+        <div
+          className={`relative mx-auto overflow-hidden rounded-xl border-2 border-red-200 select-none ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+          style={{ width: CROP_W, height: CROP_H }}
+          onMouseDown={e => { e.preventDefault(); startDrag(e.clientX, e.clientY) }}
+          onMouseMove={e => moveDrag(e.clientX, e.clientY)}
+          onMouseUp={stopDrag}
+          onMouseLeave={stopDrag}
+          onTouchStart={e => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
+          onTouchMove={e => { e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY) }}
+          onTouchEnd={stopDrag}
+        >
+          <img
+            ref={imgRef}
+            src={imgUrl}
+            alt="crop preview"
+            onLoad={onLoad}
+            draggable={false}
+            className="absolute pointer-events-none"
+            style={{ width: dispW, height: dispH, left: imgLeft, top: imgTop }}
+          />
+
+          {/* Guias de terços (regra dos terços) */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage:
+                  'linear-gradient(rgba(255,255,255,0.18) 1px, transparent 1px), ' +
+                  'linear-gradient(90deg, rgba(255,255,255,0.18) 1px, transparent 1px)',
+                backgroundSize: `${CROP_W / 3}px ${CROP_H / 3}px`,
+              }}
+            />
+            {/* Borda do frame */}
+            <div className="absolute inset-0 border-2 border-white/40 rounded-xl" />
+            {/* Canto TL */}
+            <div className="absolute top-2 left-2 w-5 h-5 border-t-2 border-l-2 border-white rounded-tl" />
+            {/* Canto TR */}
+            <div className="absolute top-2 right-2 w-5 h-5 border-t-2 border-r-2 border-white rounded-tr" />
+            {/* Canto BL */}
+            <div className="absolute bottom-2 left-2 w-5 h-5 border-b-2 border-l-2 border-white rounded-bl" />
+            {/* Canto BR */}
+            <div className="absolute bottom-2 right-2 w-5 h-5 border-b-2 border-r-2 border-white rounded-br" />
+          </div>
+        </div>
+
+        {/* Zoom slider */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-400">
+              <ZoomIn size={12} />
+              <span>Zoom</span>
+            </div>
+            <span className="text-[10px] font-black text-red-600">{Math.round((zoom / minZoom) * 100)}%</span>
+          </div>
+          <input
+            type="range"
+            min={minZoom}
+            max={maxZoom}
+            step={0.005}
+            value={zoom}
+            onChange={e => handleZoomChange(parseFloat(e.target.value))}
+            className="w-full h-1.5 rounded-full accent-red-600 cursor-pointer"
+          />
+          <div className="flex justify-between text-[9px] text-slate-300 font-bold">
+            <span>Mín</span>
+            <span>Máx</span>
+          </div>
+        </div>
+
+        {/* Botões */}
+        <div className="flex gap-3 pt-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-black uppercase text-xs transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={applying}
+            className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white font-black uppercase text-xs transition-all flex items-center justify-center gap-1.5"
+          >
+            {applying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            Aplicar
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )
 }
 
 // ── Empty form factory ───────────────────────────────────────
@@ -198,7 +329,6 @@ function emptyForm(): Partial<DbSticker> {
     image_url: '',
   }
 }
-
 
 // ── Main Component ───────────────────────────────────────────
 export default function AdminStickerEditor() {
@@ -214,6 +344,9 @@ export default function AdminStickerEditor() {
   const [uploadProgress, setUploadProgress] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  // Crop
+  const [rawFile, setRawFile] = useState<File | null>(null)
+  const [showCropper, setShowCropper] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const fetchStickers = useCallback(async () => {
@@ -249,19 +382,28 @@ export default function AdminStickerEditor() {
     setShowForm(true)
   }
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Abre o cropper interativo ao selecionar arquivo
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    // Crop automático para enquadrar o rosto (retrato 3:4, foco no topo)
-    setUploadProgress(true)
-    const croppedFile = await cropToFace(file)
-    setUploadProgress(false)
+    setRawFile(file)
+    setShowCropper(true)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  // Callback do cropper: recebe arquivo recortado
+  const handleCropConfirm = (croppedFile: File) => {
+    setShowCropper(false)
+    setRawFile(null)
     setImageFile(croppedFile)
     const url = URL.createObjectURL(croppedFile)
     setImagePreview(url)
     setForm(f => ({ ...f, image_url: url }))
-    // Reset o input para permitir re-selecionar o mesmo arquivo
-    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  const handleCropCancel = () => {
+    setShowCropper(false)
+    setRawFile(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -272,7 +414,6 @@ export default function AdminStickerEditor() {
     try {
       let imageUrl = form.image_url ?? ''
 
-      // Upload image if a new file was selected
       if (imageFile) {
         const stickerId = (editingId ?? form.id ?? `s${Date.now()}`).trim() || `s${Date.now()}`
         setUploadProgress(true)
@@ -387,6 +528,17 @@ export default function AdminStickerEditor() {
         </div>
       )}
 
+      {/* ── Cropper Modal ────────────────────────────────────── */}
+      <AnimatePresence>
+        {showCropper && rawFile && (
+          <ImageCropper
+            file={rawFile}
+            onConfirm={handleCropConfirm}
+            onCancel={handleCropCancel}
+          />
+        )}
+      </AnimatePresence>
+
       {/* ── Form Slide-over ──────────────────────────────────── */}
       <AnimatePresence>
         {showForm && (
@@ -444,12 +596,12 @@ export default function AdminStickerEditor() {
                         className="w-full py-10 border-2 border-dashed border-slate-200 hover:border-red-400 rounded-xl flex flex-col items-center gap-2 text-slate-400 hover:text-red-500 transition-all">
                         <ImagePlus size={28} />
                         <span className="text-xs font-black uppercase tracking-wider">Carregar imagem</span>
-                        <span className="text-[10px] text-slate-300">PNG, JPG, WEBP · Crop automático no rosto</span>
+                        <span className="text-[10px] text-slate-300">PNG, JPG, WEBP · Recorte manual 3:4</span>
                       </button>
                     )}
                     {uploadProgress && (
                       <div className="flex items-center gap-2 text-xs text-red-500 font-black">
-                        <Loader2 size={14} className="animate-spin" />Processando imagem (crop de rosto)...
+                        <Loader2 size={14} className="animate-spin" />Enviando imagem...
                       </div>
                     )}
                     {/* Optional image URL override */}
@@ -575,7 +727,7 @@ export default function AdminStickerEditor() {
               <Trash2 size={28} className="text-red-600" />
             </div>
             <div>
-              <h4 className="text-xl font-black uppercase uppercase italic tracking-tighter text-slate-900">
+              <h4 className="text-xl font-black uppercase italic tracking-tighter text-slate-900">
                 Excluir Figurinha?
               </h4>
               <p className="text-slate-500 text-sm mt-2 font-medium">

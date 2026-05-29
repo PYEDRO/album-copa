@@ -30,6 +30,7 @@ const RARITY_BORDER: Record<string, string> = {
 interface UserWithDups {
   id: string
   name: string
+  avatarUrl: string | null
   duplicateCount: number
   stickerIds: string[]
 }
@@ -164,9 +165,10 @@ const UserDupCard: React.FC<{
       {/* Usuário */}
       <div className="flex items-center gap-3">
         <img
-          src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`}
+          src={user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`}
           alt={user.name}
-          className="w-10 h-10 rounded-full border-2 border-slate-100 bg-slate-50 flex-shrink-0"
+          referrerPolicy="no-referrer"
+          className="w-10 h-10 rounded-full border-2 border-slate-100 bg-slate-50 flex-shrink-0 object-cover"
         />
         <div className="min-w-0">
           <p className="text-sm font-black text-slate-800 truncate">{user.name}</p>
@@ -238,6 +240,7 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
             (data as any[]).map(row => ({
               id:             row.user_id,
               name:           row.user_name ?? 'Jogador',
+              avatarUrl:      row.user_avatar ?? null,
               duplicateCount: Number(row.duplicate_count),
               stickerIds:     row.sticker_ids ?? [],
             })),
@@ -256,7 +259,8 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const myStickers = allStickers.filter(s => (userStickers.get(s.id) ?? 0) > 0)
+  // Apenas figurinhas com duplicatas (qty >= 2) podem ser oferecidas em trocas
+  const myStickers = allStickers.filter(s => (userStickers.get(s.id) ?? 0) > 1)
 
   const toggleSticker = (id: string, list: string[], setter: (v: string[]) => void) =>
     setter(list.includes(id) ? list.filter(x => x !== id) : [...list, id])
@@ -510,22 +514,26 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
 
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                    Você oferece (suas figurinhas)
+                    Você oferece <span className="normal-case text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold ml-1">só repetidas</span>
                   </label>
-                  <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100">
-                    {myStickers.map(s => (
-                      <button key={s.id}
-                        onClick={() => toggleSticker(s.id, offered, setOffered)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all border-2 ${
-                          offered.includes(s.id)
-                            ? 'bg-red-600 text-white border-red-700'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-red-300'
-                        }`}
-                      >
-                        {s.name} {(userStickers.get(s.id) ?? 0) > 1 ? `(x${userStickers.get(s.id)})` : ''}
-                      </button>
-                    ))}
-                  </div>
+                  {myStickers.length === 0 ? (
+                    <p className="text-[11px] text-slate-400 italic p-3 bg-slate-50 rounded-xl border border-slate-100">Você não tem figurinhas repetidas para oferecer.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100">
+                      {myStickers.map(s => (
+                        <button key={s.id}
+                          onClick={() => toggleSticker(s.id, offered, setOffered)}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all border-2 ${
+                            offered.includes(s.id)
+                              ? 'bg-red-600 text-white border-red-700'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-red-300'
+                          }`}
+                        >
+                          {s.name} <span className="opacity-70">(x{userStickers.get(s.id)})</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>
