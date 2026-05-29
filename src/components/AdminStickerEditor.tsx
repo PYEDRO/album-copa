@@ -343,6 +343,7 @@ export default function AdminStickerEditor() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   // Crop
   const [rawFile, setRawFile] = useState<File | null>(null)
@@ -448,8 +449,13 @@ export default function AdminStickerEditor() {
   }
 
   const handleDelete = async (id: string) => {
-    await admin.deleteSticker(id)
+    const err = await admin.deleteSticker(id)
+    if (err) {
+      setDeleteError(err.message)
+      return
+    }
     setDeleteConfirm(null)
+    setDeleteError(null)
     await fetchStickers()
   }
 
@@ -719,7 +725,7 @@ export default function AdminStickerEditor() {
       {/* Delete Confirm */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-6">
-          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setDeleteConfirm(null)} />
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => { setDeleteConfirm(null); setDeleteError(null) }} />
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             className="relative bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl z-10 text-center space-y-6"
           >
@@ -731,11 +737,16 @@ export default function AdminStickerEditor() {
                 Excluir Figurinha?
               </h4>
               <p className="text-slate-500 text-sm mt-2 font-medium">
-                ID: <strong>{deleteConfirm}</strong>. Esta ação não pode ser desfeita.
+                ID: <strong>{deleteConfirm}</strong>. Esta ação também remove a figurinha dos álbuns de todos os usuários.
               </p>
             </div>
+            {deleteError && (
+              <p className="text-xs text-red-600 font-bold bg-red-50 border border-red-200 rounded-xl p-3">
+                Erro: {deleteError}
+              </p>
+            )}
             <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm(null)}
+              <button onClick={() => { setDeleteConfirm(null); setDeleteError(null) }}
                 className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 font-black uppercase text-xs text-slate-600 transition-all">
                 Cancelar
               </button>

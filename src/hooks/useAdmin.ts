@@ -11,6 +11,7 @@ export interface AdminUser {
   last_pack_at: string | null
   created_at: string
   approved: boolean | null
+  avatar_url: string | null
 }
 
 export interface AdminMetrics {
@@ -76,7 +77,7 @@ export function useAdmin() {
   const fetchUsers = useCallback(async () => {
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, name, role, score, last_pack_at, created_at, approved')
+      .select('id, name, role, score, last_pack_at, created_at, approved, avatar_url')
       .order('score', { ascending: false })
 
     if (!profiles) return
@@ -99,7 +100,8 @@ export function useAdmin() {
 
     setUsers(profiles.map((p: {
       id: string; name: string; role: 'USER'|'ADMIN'; score: number;
-      last_pack_at: string|null; created_at: string; approved: boolean|null
+      last_pack_at: string|null; created_at: string; approved: boolean|null;
+      avatar_url: string|null
     }) => ({
       ...p,
       total_stickers: stickerMap.get(p.id) ?? 0,
@@ -151,11 +153,17 @@ export function useAdmin() {
   }, [])
 
   const updateSticker = useCallback(async (id: string, sticker: Partial<DbSticker>) => {
-    const { error } = await supabase.from('stickers').update(sticker).eq('id', id)
+    // Remove o campo `id` do payload — não pode atualizar a PK
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: _id, ...rest } = sticker
+    const { error } = await supabase.from('stickers').update(rest).eq('id', id)
     return error
   }, [])
 
   const deleteSticker = useCallback(async (id: string) => {
+    // Remove primeiro do inventário dos usuários (FK sem CASCADE)
+    // O admin tem permissão via RLS "Admins can delete any user_stickers"
+    await supabase.from('user_stickers').delete().eq('sticker_id', id)
     const { error } = await supabase.from('stickers').delete().eq('id', id)
     return error
   }, [])
