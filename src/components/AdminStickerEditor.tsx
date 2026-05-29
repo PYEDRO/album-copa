@@ -392,6 +392,26 @@ export default function AdminStickerEditor() {
     if (fileRef.current) fileRef.current.value = ''
   }
 
+  // Carrega a imagem atual (URL) no cropper sem precisar re-upload
+  const [loadingCrop, setLoadingCrop] = useState(false)
+  const openCropperForCurrentImage = async () => {
+    const url = imagePreview ?? form.image_url
+    if (!url) return
+    setLoadingCrop(true)
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const ext = blob.type === 'image/png' ? 'png' : 'jpg'
+      const file = new File([blob], `sticker_atual.${ext}`, { type: blob.type })
+      setRawFile(file)
+      setShowCropper(true)
+    } catch {
+      alert('Não foi possível carregar a imagem atual para recorte.')
+    } finally {
+      setLoadingCrop(false)
+    }
+  }
+
   // Callback do cropper: recebe arquivo recortado
   const handleCropConfirm = (croppedFile: File) => {
     setShowCropper(false)
@@ -592,10 +612,18 @@ export default function AdminStickerEditor() {
                           alt="preview"
                           className="w-full max-h-48 object-contain rounded-xl border border-slate-200 bg-slate-50"
                         />
-                        <button type="button" onClick={() => fileRef.current?.click()}
-                          className="w-full py-2 border-2 border-dashed border-slate-200 hover:border-red-400 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-red-600 transition-all flex items-center justify-center gap-2">
-                          <ImagePlus size={14} />Trocar imagem
-                        </button>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={openCropperForCurrentImage}
+                            disabled={loadingCrop}
+                            className="flex-1 py-2 border-2 border-dashed border-amber-300 hover:border-amber-500 rounded-xl text-xs font-black uppercase text-amber-500 hover:text-amber-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                            {loadingCrop ? <Loader2 size={14} className="animate-spin" /> : <ZoomIn size={14} />}
+                            Recortar
+                          </button>
+                          <button type="button" onClick={() => fileRef.current?.click()}
+                            className="flex-1 py-2 border-2 border-dashed border-slate-200 hover:border-red-400 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-red-600 transition-all flex items-center justify-center gap-2">
+                            <ImagePlus size={14} />Trocar
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <button type="button" onClick={() => fileRef.current?.click()}

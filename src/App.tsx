@@ -306,7 +306,7 @@ const RankingSection = ({ leaderboard, currentUserId, onForceRefresh, refreshing
 );
 
 
-const MAX_GUESSES_PER_DAY = 3;
+const MAX_GUESSES_PER_DAY = 5;
 // Altere esta chave para resetar as partidas diárias de todos os usuários
 const GAME_RESET_KEY = '2026-05-26-v1';
 
