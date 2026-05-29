@@ -103,11 +103,16 @@ const AlbumCard = ({ collaborator, globalIndex, isCollected, onClick }: {
     );
   }
   return (
-    <div className="w-full aspect-[3/4] bg-white border-[3px] border-red-500 rounded-2xl overflow-hidden relative shadow-md cursor-pointer group hover:shadow-xl transition-shadow" onClick={onClick}>
-      <img src={collaborator.imageUrl} alt={collaborator.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
-      <div className="absolute top-1.5 right-1.5 bg-red-600/80 backdrop-blur-sm rounded-md px-1 py-0.5">
-        <span className="text-[6px] font-black text-white leading-none">{globalIndex + 1}</span>
+    <div className="flex flex-col gap-1">
+      <div className="w-full aspect-[3/4] bg-white border-[3px] border-red-500 rounded-2xl overflow-hidden relative shadow-md cursor-pointer group hover:shadow-xl transition-shadow" onClick={onClick}>
+        <img src={collaborator.imageUrl} alt={collaborator.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
+        <div className="absolute top-1.5 right-1.5 bg-red-600/80 backdrop-blur-sm rounded-md px-1 py-0.5">
+          <span className="text-[6px] font-black text-white leading-none">{globalIndex + 1}</span>
+        </div>
       </div>
+      <p className="text-center font-black uppercase truncate text-slate-800 leading-tight" style={{ fontSize: '7px', letterSpacing: '0.04em' }}>
+        {collaborator.name}
+      </p>
     </div>
   );
 };

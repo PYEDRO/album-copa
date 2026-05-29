@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { ArrowLeftRight, Check, X, Loader2, ChevronRight, Plus, Copy, CheckCheck, Users } from 'lucide-react'
+import { ArrowLeftRight, Check, X, Loader2, ChevronRight, Plus, Copy, CheckCheck, Users, UserCheck, UserX, AlertCircle } from 'lucide-react'
 import { useTrades } from '../hooks/useTrades'
 import { supabase } from '../lib/supabase'
 import type { DbSticker, DbTrade } from '../lib/supabase'
@@ -152,7 +152,7 @@ const TradeCard: React.FC<TradeCardProps> = ({
 const UserDupCard: React.FC<{
   user: UserWithDups
   allStickers: DbSticker[]
-  onPropose: (userId: string, stickerIds: string[]) => void
+  onPropose: (userId: string, stickerIds: string[], userName: string) => void
 }> = ({ user, allStickers, onPropose }) => {
   const thumbIds = user.stickerIds.slice(0, 4)
 
@@ -191,7 +191,7 @@ const UserDupCard: React.FC<{
 
         {/* Botão seta */}
         <button
-          onClick={() => onPropose(user.id, user.stickerIds)}
+          onClick={() => onPropose(user.id, user.stickerIds, user.name)}
           className="w-8 h-8 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center flex-shrink-0 transition-all shadow-md hover:scale-110 active:scale-95"
         >
           <ChevronRight size={16} />
@@ -207,13 +207,20 @@ const USERS_PER_PAGE = 3
 export default function TradeSystem({ userId, userStickers, allStickers, tradesHook }: Props) {
   const { trades, acting, error, acceptTrade, updateTradeStatus } = tradesHook
 
-  const [showPropose, setShowPropose]         = useState(false)
-  const [toUserId, setToUserId]               = useState('')
-  const [offered, setOffered]                 = useState<string[]>([])
-  const [requested, setRequested]             = useState<string[]>([])
-  const [proposing, setProposing]             = useState(false)
-  const [copied, setCopied]                   = useState(false)
-  const [targetDuplicateIds, setTargetDuplicateIds] = useState<string[]>([]) // repetidas do alvo
+  const [showPropose, setShowPropose] = useState(false)
+  const [toUserId, setToUserId]       = useState('')
+  const [offered, setOffered]         = useState<string[]>([])
+  const [requested, setRequested]     = useState<string[]>([])
+  const [proposing, setProposing]     = useState(false)
+  const [copied, setCopied]           = useState(false)
+  const [targetDuplicateIds, setTargetDuplicateIds] = useState<string[]>([])
+
+  // Info do destinatário buscada dinamicamente
+  interface TargetUser { loading: boolean; found: boolean | null; name: string; ids: string[] }
+  const [targetUser, setTargetUser] = useState<TargetUser>({ loading: false, found: null, name: '', ids: [] })
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
   // Usuários com duplicatas
   const [usersWithDups, setUsersWithDups] = useState<UserWithDups[]>([])
@@ -253,6 +260,51 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
     fetchUsersWithDups()
   }, [userId])
 
+  // Lookup debounced: quando o UUID muda, busca nome + repetidas do destinatário
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    if (!UUID_RE.test(toUserId)) {
+      setTargetUser({ loading: false, found: null, name: '', ids: [] })
+      setTargetDuplicateIds([])
+      setRequested([])
+      return
+    }
+
+    // Verifica cache local primeiro (resultado instantâneo)
+    const cached = usersWithDups.find(u => u.id === toUserId)
+    if (cached) {
+      setTargetUser({ loading: false, found: true, name: cached.name, ids: cached.stickerIds })
+      setTargetDuplicateIds(cached.stickerIds)
+      setRequested([])
+      return
+    }
+
+    // Não estava no cache — consulta o banco com debounce de 600ms
+    setTargetUser({ loading: true, found: null, name: '', ids: [] })
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_user_trade_info', {
+          p_target_user_id: toUserId,
+        })
+        if (error || !data || !data.found) {
+          setTargetUser({ loading: false, found: false, name: '', ids: [] })
+          setTargetDuplicateIds([])
+        } else {
+          const ids: string[] = data.duplicate_sticker_ids ?? []
+          setTargetUser({ loading: false, found: true, name: data.name, ids })
+          setTargetDuplicateIds(ids)
+          setRequested([])
+        }
+      } catch {
+        setTargetUser({ loading: false, found: false, name: '', ids: [] })
+      }
+    }, 600)
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toUserId, usersWithDups])
+
   const copyId = () => {
     navigator.clipboard.writeText(userId)
     setCopied(true)
@@ -276,19 +328,21 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
     setProposing(false)
   }
 
-  // Abre modal pré-preenchido com ID + filtra só as repetidas do alvo
-  const startTradeWith = (targetUserId: string, duplicateStickerIds: string[] = []) => {
+  // Abre modal pré-preenchido a partir da lista de usuários (dados já conhecidos)
+  const startTradeWith = (targetUserId: string, duplicateStickerIds: string[] = [], userName = '') => {
     setToUserId(targetUserId)
     setTargetDuplicateIds(duplicateStickerIds)
+    setTargetUser({ loading: false, found: true, name: userName, ids: duplicateStickerIds })
     setRequested([])
     setOffered([])
     setShowPropose(true)
   }
 
-  // Ao fechar o modal, limpa o filtro de repetidas
+  // Ao fechar o modal, reseta tudo
   const closePropose = () => {
     setShowPropose(false)
     setTargetDuplicateIds([])
+    setTargetUser({ loading: false, found: null, name: '', ids: [] })
     setToUserId('')
     setOffered([])
     setRequested([])
@@ -450,7 +504,7 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
                   key={user.id}
                   user={user}
                   allStickers={allStickers}
-                  onPropose={(uid, ids) => startTradeWith(uid, ids)}
+                  onPropose={(uid, ids, name) => startTradeWith(uid, ids, name)}
                 />
               ))}
             </motion.div>
@@ -498,6 +552,7 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
               </div>
 
               <div className="space-y-6">
+                {/* ── UUID do destinatário ── */}
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
                     ID do destinatário
@@ -505,13 +560,40 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
                   <input
                     type="text"
                     value={toUserId}
-                    onChange={e => setToUserId(e.target.value)}
-                    placeholder="UUID do usuário"
-                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-100 focus:border-red-400 outline-none text-sm font-medium"
+                    onChange={e => setToUserId(e.target.value.trim())}
+                    placeholder="Cole o UUID do jogador aqui"
+                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none text-sm font-medium transition-colors ${
+                      targetUser.found === false ? 'border-red-300 bg-red-50'
+                      : targetUser.found === true ? 'border-emerald-300 bg-emerald-50'
+                      : 'border-slate-100 focus:border-red-400'
+                    }`}
                   />
-                  <p className="text-[10px] text-slate-400 mt-1">O outro jogador precisa compartilhar o UUID do perfil.</p>
+                  {/* Feedback do lookup */}
+                  <div className="mt-2 min-h-[20px]">
+                    {targetUser.loading && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-slate-400 font-bold">
+                        <Loader2 size={11} className="animate-spin" /> Buscando jogador...
+                      </span>
+                    )}
+                    {!targetUser.loading && targetUser.found === false && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-red-500 font-black">
+                        <UserX size={12} /> Usuário não encontrado.
+                      </span>
+                    )}
+                    {!targetUser.loading && targetUser.found === true && targetUser.ids.length === 0 && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-amber-600 font-black">
+                        <AlertCircle size={12} /> <strong>{targetUser.name}</strong> não tem figurinhas repetidas.
+                      </span>
+                    )}
+                    {!targetUser.loading && targetUser.found === true && targetUser.ids.length > 0 && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-black">
+                        <UserCheck size={12} /> <strong>{targetUser.name}</strong> · {targetUser.ids.length} repetida{targetUser.ids.length !== 1 ? 's' : ''} disponível{targetUser.ids.length !== 1 ? 'is' : ''}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
+                {/* ── Você oferece ── */}
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
                     Você oferece <span className="normal-case text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold ml-1">só repetidas</span>
@@ -536,32 +618,40 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
                   )}
                 </div>
 
+                {/* ── Você quer ── */}
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                    Você quer (do outro jogador)
-                    {targetDuplicateIds.length > 0 && (
+                    Você quer
+                    {targetUser.found === true && targetUser.ids.length > 0 && (
                       <span className="ml-2 normal-case text-[9px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">
-                        só repetidas disponíveis
+                        só repetidas de {targetUser.name}
                       </span>
                     )}
                   </label>
-                  <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100">
-                    {(targetDuplicateIds.length > 0
-                      ? allStickers.filter(s => targetDuplicateIds.includes(s.id))
-                      : allStickers
-                    ).map(s => (
-                      <button key={s.id}
-                        onClick={() => toggleSticker(s.id, requested, setRequested)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all border-2 ${
-                          requested.includes(s.id)
-                            ? 'bg-blue-600 text-white border-blue-700'
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                        }`}
-                      >
-                        {s.name}
-                      </button>
-                    ))}
-                  </div>
+                  {targetUser.found !== true ? (
+                    <p className="text-[11px] text-slate-400 italic p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      {targetUser.loading ? 'Aguardando dados do jogador...' : 'Informe o ID do destinatário primeiro.'}
+                    </p>
+                  ) : targetUser.ids.length === 0 ? (
+                    <p className="text-[11px] text-amber-600 italic p-3 bg-amber-50 rounded-xl border border-amber-100">
+                      {targetUser.name} não tem repetidas disponíveis para troca.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100">
+                      {allStickers.filter(s => targetUser.ids.includes(s.id)).map(s => (
+                        <button key={s.id}
+                          onClick={() => toggleSticker(s.id, requested, setRequested)}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all border-2 ${
+                            requested.includes(s.id)
+                              ? 'bg-blue-600 text-white border-blue-700'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
+                          }`}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <button
