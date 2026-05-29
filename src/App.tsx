@@ -722,29 +722,58 @@ export default function App() {
 
       <AnimatePresence>
         {selectedSticker && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 sm:p-12">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedSticker(null)} className="absolute inset-0 bg-red-950/40 backdrop-blur-md" />
-            <div className="relative flex flex-col lg:flex-row items-center gap-16 z-10 w-full max-w-6xl">
-              <motion.div layoutId={`card-${selectedSticker.id}`} className="w-full max-w-[360px] aspect-[3/4]"><StickerCard collaborator={selectedSticker} /></motion.div>
-              <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }} className="max-w-xl space-y-10">
-                <div className="space-y-6">
-                  <div className="flex items-center gap-4">
-                    <div className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase italic tracking-widest ${selectedSticker.rarity === Rarity.LEGENDARY ? 'bg-red-600 text-white' : selectedSticker.rarity === Rarity.RARE ? 'bg-red-500 text-white' : 'bg-slate-700 text-white'}`}>{selectedSticker.rarity}</div>
-                    <span className="text-red-400 font-black font-mono text-sm tracking-widest">REF ID #{String(selectedSticker.id).padStart(3, '0')}</span>
-                  </div>
-                  <h2 className="text-6xl md:text-7xl font-black italic tracking-tighter leading-none text-slate-900 uppercase">{selectedSticker.name}</h2>
-                  <h3 className="text-2xl text-red-600 font-black italic uppercase tracking-tighter">{selectedSticker.role}</h3>
-                </div>
-                <div className="p-10 bg-white border-4 border-red-100 rounded-[40px] shadow-2xl relative">
-                  <div className="absolute -top-5 -left-5 bg-red-600 p-4 rounded-2xl shadow-2xl rotate-12"><Sparkles className="text-white" size={24} /></div>
-                  <p className="text-slate-600 leading-relaxed mb-10 font-serif italic text-2xl font-light">"{selectedSticker.bio}"</p>
-                  <div className="space-y-6">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-red-300">Conquistas Desbloqueadas</h4>
-                    <div className="flex flex-wrap gap-3">{selectedSticker.achievements.map((a, i) => (<span key={i} className="px-6 py-3 bg-red-50 rounded-2xl text-xs border border-red-100 text-red-600 font-black italic uppercase tracking-widest">{a}</span>))}</div>
-                  </div>
-                </div>
-                <button onClick={() => setSelectedSticker(null)} className="w-full py-5 bg-red-600 hover:bg-red-700 text-white rounded-3xl font-black italic uppercase tracking-[0.2em] flex items-center justify-center gap-3 transition-all border-2 border-red-800 shadow-2xl"><ChevronLeft size={20} />Fechar Visualizacao</button>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-8">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedSticker(null)} className="absolute inset-0 bg-red-950/60 backdrop-blur-md" />
+            <div className="relative flex flex-col lg:flex-row items-center gap-8 lg:gap-14 z-10 w-full max-w-5xl">
+
+              {/* ── Foto completa ── */}
+              <motion.div
+                layoutId={`card-${selectedSticker.id}`}
+                className="w-full max-w-[320px] lg:max-w-[380px] flex-shrink-0 rounded-2xl overflow-hidden shadow-2xl border-4 border-white/20 bg-white"
+              >
+                <img
+                  src={selectedSticker.imageUrl}
+                  alt={selectedSticker.name}
+                  className="w-full h-auto object-contain"
+                  referrerPolicy="no-referrer"
+                />
               </motion.div>
+
+              {/* ── Info ── */}
+              <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }} className="flex flex-col gap-6 w-full max-w-lg">
+                {/* Badge raridade + ID */}
+                <div className="flex items-center gap-3">
+                  <div className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase italic tracking-widest ${selectedSticker.rarity === Rarity.LEGENDARY ? 'bg-red-600 text-white' : selectedSticker.rarity === Rarity.RARE ? 'bg-amber-400 text-amber-900' : 'bg-white/20 text-white'}`}>
+                    {selectedSticker.rarity === Rarity.LEGENDARY ? '★★★ Lendário' : selectedSticker.rarity === Rarity.RARE ? '★★ Raro' : '★ Comum'}
+                  </div>
+                  <span className="text-white/50 font-black font-mono text-sm tracking-widest">#{String(selectedSticker.id).padStart(3, '0')}</span>
+                </div>
+
+                {/* Nome — grande */}
+                <h2 className="text-5xl sm:text-6xl lg:text-7xl font-black italic tracking-tighter leading-none text-white uppercase drop-shadow-lg">
+                  {selectedSticker.name}
+                </h2>
+
+                {/* Cargo + Time */}
+                <div>
+                  <p className="text-red-300 font-black italic uppercase tracking-tighter text-2xl">{selectedSticker.role}</p>
+                  <p className="text-white/50 font-bold uppercase tracking-widest text-xs mt-1">{selectedSticker.team}</p>
+                </div>
+
+                {/* Bio / Talentos */}
+                {selectedSticker.bio && (
+                  <div className="bg-white/10 border border-white/20 rounded-2xl p-6 backdrop-blur-sm">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-red-300 mb-3">Talentos</p>
+                    <p className="text-white/90 leading-relaxed font-serif italic text-lg font-light">"{selectedSticker.bio}"</p>
+                  </div>
+                )}
+
+                {/* Botão fechar */}
+                <button onClick={() => setSelectedSticker(null)} className="w-full py-4 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-black italic uppercase tracking-[0.2em] flex items-center justify-center gap-3 transition-all border-2 border-red-700 shadow-2xl">
+                  <ChevronLeft size={20} />Fechar
+                </button>
+              </motion.div>
+
             </div>
           </div>
         )}
