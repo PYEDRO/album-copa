@@ -509,17 +509,6 @@ export default function App() {
             <p className="text-[10px] text-red-200 uppercase tracking-widest font-black">Coleção</p>
             <p className="text-lg font-black text-white leading-tight">{packs.uniqueOwned} <span className="text-red-300 text-xs font-bold">/ {packs.totalStickers || allCollaborators.length}</span></p>
           </div>
-          {/* Relógio BRT */}
-          <div className={`px-4 py-2 rounded-lg border flex flex-col items-center ${isWindowOpen ? 'bg-emerald-700/40 border-emerald-400/30' : 'bg-slate-900/50 border-slate-600/40'}`}>
-            <div className="flex items-center gap-1.5">
-              {isWindowOpen ? <Clock size={10} className="text-emerald-300" /> : <Lock size={10} className="text-slate-400" />}
-              <p className="text-[9px] font-black uppercase tracking-widest text-red-200">Fortaleza</p>
-            </div>
-            <p className="text-sm font-black text-white leading-tight tracking-widest font-mono">{brtClock}</p>
-            <p className={`text-[8px] font-black uppercase leading-none ${isWindowOpen ? 'text-emerald-300' : 'text-slate-400'}`}>
-              {isWindowOpen ? 'Aberto até 23:59' : `Abre em ${countdown}`}
-            </p>
-          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="hidden xl:flex flex-col items-end mr-2">
