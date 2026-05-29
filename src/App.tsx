@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Book, Gamepad2, Package, Search, Trophy, ChevronRight, ChevronLeft,
   Sparkles, ArrowLeftRight, TrendingUp, LogOut, RefreshCw,
-  User, Loader2, BarChart3, ImagePlus,
+  User, Loader2, BarChart3, ImagePlus, Clock, Lock,
 } from 'lucide-react';
 import fortesLogo from './public/fortes-logo.png';
 import AdminDashboard from './components/AdminDashboard';
@@ -339,6 +339,30 @@ export default function App() {
     catch { return { guessesRight: 0, guessesTotal: 0, lastGuessDate: null, dailyGuessCount: 0, resetKey: GAME_RESET_KEY }; }
   });
 
+  // ── Relógio BRT (Fortaleza/CE — UTC-3, sem horário de verão) ──
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  // Converte UTC → BRT (UTC-3)
+  const brt = useMemo(() => new Date(now.getTime() - 3 * 60 * 60 * 1000), [now]);
+  const brtH  = brt.getUTCHours();
+  const brtM  = brt.getUTCMinutes();
+  const brtS  = brt.getUTCSeconds();
+  const brtClock = `${String(brtH).padStart(2,'0')}:${String(brtM).padStart(2,'0')}:${String(brtS).padStart(2,'0')}`;
+  // Janela permitida: 12:00 – 23:59
+  const isWindowOpen = brtH >= 12;
+  // Contagem regressiva até 12:00 (só quando fechado)
+  const countdown = useMemo(() => {
+    if (isWindowOpen) return null;
+    const secsLeft = (12 * 3600) - (brtH * 3600 + brtM * 60 + brtS);
+    const h = Math.floor(secsLeft / 3600);
+    const m = Math.floor((secsLeft % 3600) / 60);
+    const s = secsLeft % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }, [isWindowOpen, brtH, brtM, brtS]);
+
   // ── Pack status vem do servidor via usePacks ─────────────────
   const packsRemaining = packs.packsRemaining;
   const [gameState, setGameState] = useState<GameState>({ target: null, attemptsRemaining: 2, options: [], feedback: null, won: false, canPlay: true });
@@ -361,6 +385,10 @@ export default function App() {
   const paginate = (n: number) => { setDirection(n > currentPage ? 1 : -1); setCurrentPage(n); };
 
   const openPack = async () => {
+    if (!isWindowOpen) {
+      alert(`Os packs ficam disponíveis das 12:00 às 23:59 (horário de Fortaleza). Aguarde: ${countdown}`);
+      return;
+    }
     if (packsRemaining <= 0) {
       alert(`Você já resgatou ${packs.maxPacksPerDay} packs hoje! Volte amanhã.`);
       return;
@@ -409,6 +437,11 @@ export default function App() {
   }, [auth.user, packs]);
 
   const startNewGame = () => {
+    if (!isWindowOpen) {
+      setGameState({ target: null, attemptsRemaining: 2, options: [], feedback: `O jogo fica disponível das 12:00 às 23:59 (horário de Fortaleza).`, won: false, canPlay: false });
+      setView('game');
+      return;
+    }
     const today = new Date().toISOString().split('T')[0];
     const isToday = localGameStats.lastGuessDate === today;
     const dailyCount = isToday ? (localGameStats.dailyGuessCount ?? 0) : 0;
@@ -471,10 +504,21 @@ export default function App() {
           <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center border-4 border-red-800 shadow-[0_0_15px_rgba(255,255,255,0.4)]"><span className="text-red-600 font-black text-2xl italic">F</span></div>
           <div><h1 className="text-xl font-black tracking-tighter text-white uppercase leading-none">Copa Fanfortes</h1><p className="text-[10px] font-black text-red-100 tracking-[0.2em] uppercase mt-1">Álbum de Conquistas &amp; Talentos</p></div>
         </div>
-        <div className="hidden lg:flex items-center gap-6">
+        <div className="hidden lg:flex items-center gap-4">
           <div className="bg-red-800/40 px-4 py-2 rounded-lg border border-red-400/20">
             <p className="text-[10px] text-red-200 uppercase tracking-widest font-black">Coleção</p>
             <p className="text-lg font-black text-white leading-tight">{packs.uniqueOwned} <span className="text-red-300 text-xs font-bold">/ {packs.totalStickers || allCollaborators.length}</span></p>
+          </div>
+          {/* Relógio BRT */}
+          <div className={`px-4 py-2 rounded-lg border flex flex-col items-center ${isWindowOpen ? 'bg-emerald-700/40 border-emerald-400/30' : 'bg-slate-900/50 border-slate-600/40'}`}>
+            <div className="flex items-center gap-1.5">
+              {isWindowOpen ? <Clock size={10} className="text-emerald-300" /> : <Lock size={10} className="text-slate-400" />}
+              <p className="text-[9px] font-black uppercase tracking-widest text-red-200">Fortaleza</p>
+            </div>
+            <p className="text-sm font-black text-white leading-tight tracking-widest font-mono">{brtClock}</p>
+            <p className={`text-[8px] font-black uppercase leading-none ${isWindowOpen ? 'text-emerald-300' : 'text-slate-400'}`}>
+              {isWindowOpen ? 'Aberto até 23:59' : `Abre em ${countdown}`}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -487,7 +531,10 @@ export default function App() {
           <button onClick={() => setView('album')} title="Ver Álbum" className={`p-2 rounded-lg transition-all ${view === 'album' ? 'bg-white text-red-600 shadow-lg scale-110' : 'hover:bg-black/10 text-white/70'}`}><Book size={20} /></button>
           <button onClick={() => setView('ranking')} title="Ranking" className={`p-2 rounded-lg transition-all ${view === 'ranking' ? 'bg-white text-red-600 shadow-lg scale-110' : 'hover:bg-black/10 text-white/70'}`}><TrendingUp size={20} /></button>
           <button onClick={() => setView('trading')} title="Trocar" className={`p-2 rounded-lg transition-all ${view === 'trading' ? 'bg-white text-red-600 shadow-lg scale-110' : 'hover:bg-black/10 text-white/70'}`}><ArrowLeftRight size={20} /></button>
-          <button onClick={startNewGame} title="Adivinhar" className={`p-2 rounded-lg transition-all ${view === 'game' ? 'bg-white text-red-600 shadow-lg scale-110' : 'hover:bg-black/10 text-white/70'}`}><Gamepad2 size={20} /></button>
+          <button onClick={startNewGame} title={isWindowOpen ? 'Adivinhar' : 'Disponível das 12:00 às 23:59'} className={`p-2 rounded-lg transition-all relative ${view === 'game' ? 'bg-white text-red-600 shadow-lg scale-110' : isWindowOpen ? 'hover:bg-black/10 text-white/70' : 'text-white/30 cursor-not-allowed'}`}>
+            <Gamepad2 size={20} />
+            {!isWindowOpen && <Lock size={8} className="absolute -top-0.5 -right-0.5 text-white/50" />}
+          </button>
           {auth.profile?.role === 'ADMIN' && (
             <>
               <div className="h-8 w-px bg-red-400/20 mx-1" />
@@ -495,8 +542,8 @@ export default function App() {
               <button onClick={() => setView('admin-stickers')} title="Editor de Figurinhas" className={`p-2 rounded-lg transition-all ${view === 'admin-stickers' ? 'bg-white text-red-600 shadow-lg scale-110' : 'hover:bg-black/10 text-white/70'}`}><ImagePlus size={20} /></button>
             </>
           )}
-          <button onClick={openPack} disabled={packs.claiming || packsRemaining <= 0} className="flex items-center gap-2 bg-white hover:bg-red-50 disabled:opacity-60 text-red-600 px-4 py-2 rounded-lg text-sm font-black transition-all shadow-lg hover:scale-105 active:scale-95 ml-2 border-2 border-red-700">
-            {packs.claiming ? <Loader2 size={18} className="animate-spin" /> : <Package size={18} />}
+          <button onClick={openPack} disabled={packs.claiming || packsRemaining <= 0 || !isWindowOpen} className="flex items-center gap-2 bg-white hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed text-red-600 px-4 py-2 rounded-lg text-sm font-black transition-all shadow-lg hover:scale-105 active:scale-95 ml-2 border-2 border-red-700">
+            {packs.claiming ? <Loader2 size={18} className="animate-spin" /> : !isWindowOpen ? <Lock size={18} /> : <Package size={18} />}
             <span className="hidden sm:inline italic uppercase">PACK</span>
           </button>
         </div>
@@ -642,6 +689,7 @@ export default function App() {
               </div>
             </motion.div>
           )}
+
 
           {view === 'admin-dashboard' && auth.profile?.role === 'ADMIN' && (
             <motion.div key="admin-dashboard" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
