@@ -40,7 +40,7 @@ function toCollaborator(s: DbSticker): Collaborator {
 
 
 
-const StickerCard = ({ collaborator, isCollected = true, onClick }: { collaborator: Collaborator; isCollected?: boolean; onClick?: () => void; key?: any; }) => {
+const StickerCard = ({ collaborator, isCollected = true, onClick, large = false }: { collaborator: Collaborator; isCollected?: boolean; onClick?: () => void; key?: any; large?: boolean; }) => {
   const isRare = collaborator.rarity === Rarity.RARE;
   const isLegendary = collaborator.rarity === Rarity.LEGENDARY;
   if (!isCollected) {
@@ -56,6 +56,58 @@ const StickerCard = ({ collaborator, isCollected = true, onClick }: { collaborat
       </div>
     );
   }
+
+  if (large) {
+    // ── Versão grande — usada na abertura de pack ──────────────
+    return (
+      <motion.div layoutId={`card-${collaborator.id}`} whileHover={{ scale: 1.03, y: -4 }} whileTap={{ scale: 0.97 }} onClick={onClick}
+        className={`relative w-full rounded-xl overflow-hidden shadow-2xl cursor-pointer transition-all duration-300
+          ${isLegendary ? 'bg-holographic' : isRare ? 'bg-gold-shiny animate-gold-glow' : 'bg-white'}
+          border-[3px] ${isLegendary ? 'border-red-400' : isRare ? 'border-amber-300' : 'border-red-200'}
+          ${isRare || isLegendary ? 'panini-shadow' : ''}`}>
+        {(isRare || isLegendary) && <div className="absolute inset-0 shiny-overlay opacity-30 z-20 pointer-events-none" />}
+
+        {/* Foto — ocupa ~60% do card */}
+        <div className={`relative w-full ${isRare ? 'bg-amber-50' : 'bg-slate-50'}`} style={{ aspectRatio: '3/2.2' }}>
+          <img src={collaborator.imageUrl} alt={collaborator.name} className="w-full h-full object-cover object-top" referrerPolicy="no-referrer" />
+          {/* Badge raridade */}
+          <div className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border
+            ${isLegendary ? 'bg-red-600 text-white border-red-700' : isRare ? 'bg-amber-400 text-amber-900 border-amber-500' : 'bg-white/80 text-slate-500 border-slate-200'}`}>
+            {isLegendary ? '★★★ Lendário' : isRare ? '★★ Raro' : '★ Comum'}
+          </div>
+          {/* Número */}
+          <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-sm rounded-md px-1.5 py-0.5">
+            <span className="text-[9px] font-black text-white leading-none">#{collaborator.id}</span>
+          </div>
+        </div>
+
+        {/* Área branca — nome, cargo e talentos */}
+        <div className={`flex flex-col gap-1 px-3 py-2.5 ${isLegendary ? 'bg-white/95' : isRare ? 'bg-gradient-to-b from-amber-50 to-white' : 'bg-white'}`}>
+          {/* Time */}
+          <span className={`text-[9px] font-black uppercase tracking-[0.15em] leading-none ${isRare ? 'text-amber-500' : 'text-slate-300'}`}>
+            {collaborator.team}
+          </span>
+          {/* Nome em destaque */}
+          <h3 className={`text-base font-black uppercase tracking-tight leading-tight ${isRare ? 'text-amber-900' : 'text-slate-900'}`}>
+            {collaborator.name}
+          </h3>
+          {/* Cargo */}
+          <p className={`text-[10px] font-bold uppercase leading-none ${isRare ? 'text-amber-600' : 'text-slate-400'}`}>
+            {collaborator.role}
+          </p>
+          {/* Talentos */}
+          {collaborator.bio && (
+            <p className={`text-[10px] leading-snug mt-0.5 ${isRare ? 'text-amber-800' : 'text-slate-500'}`}
+              style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {collaborator.bio}
+            </p>
+          )}
+        </div>
+      </motion.div>
+    );
+  }
+
+  // ── Versão compacta — álbum, game reward, modal ───────────────
   return (
     <div className="flex flex-col gap-1 group">
       <motion.div layoutId={`card-${collaborator.id}`} whileHover={{ scale: 1.05, y: -3 }} whileTap={{ scale: 0.95 }} onClick={onClick}
@@ -81,11 +133,8 @@ const StickerCard = ({ collaborator, isCollected = true, onClick }: { collaborat
           </div>
         </div>
       </motion.div>
-      <div className="text-center px-0.5 space-y-0.5">
+      <div className="text-center px-0.5">
         <p className="text-[7px] font-black uppercase italic tracking-tighter text-slate-800 group-hover:text-red-600 transition-colors truncate">{collaborator.name}</p>
-        {collaborator.bio && (
-          <p className="text-[6px] text-slate-500 leading-tight" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{collaborator.bio}</p>
-        )}
       </div>
     </div>
   );
@@ -613,13 +662,13 @@ export default function App() {
                 <h2 className="text-6xl font-black italic uppercase tracking-tighter text-red-600">Novo Pack Resgatado!</h2>
                 <p className="text-slate-500 font-medium">As entidades de talentos se manifestaram em sua coleção.</p>
               </div>
-              <div className="flex flex-wrap justify-center gap-16 px-4">
+              <div className="flex flex-wrap justify-center gap-10 px-4">
                 {activePack.map((c, i) => {
                   const isDuplicate = (packs.userStickers.get(c.id) ?? 0) > 1;
                   return (
-                    <motion.div key={`${c.id}-${i}`} initial={{ opacity: 0, scale: 0.5, rotateY: 180, y: 50 }} animate={{ opacity: 1, scale: 1.1, rotateY: 0, y: 0, transition: { delay: i * 0.4, type: 'spring', damping: 12, stiffness: 80 } }} className="w-72">
-                      <StickerCard collaborator={c} />
-                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: i * 0.4 + 0.6 } }} className={`mt-8 text-xs font-black italic uppercase tracking-[0.2em] ${isDuplicate ? 'text-slate-600' : 'text-emerald-400'}`}>{isDuplicate ? 'DUPLICADA' : 'NOVO TALENTO'}</motion.div>
+                    <motion.div key={`${c.id}-${i}`} initial={{ opacity: 0, scale: 0.5, rotateY: 180, y: 50 }} animate={{ opacity: 1, scale: 1.1, rotateY: 0, y: 0, transition: { delay: i * 0.4, type: 'spring', damping: 12, stiffness: 80 } }} className="w-64">
+                      <StickerCard collaborator={c} large />
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: i * 0.4 + 0.6 } }} className={`mt-4 text-xs font-black italic uppercase tracking-[0.2em] ${isDuplicate ? 'text-slate-400' : 'text-emerald-400'}`}>{isDuplicate ? 'DUPLICADA' : 'NOVO TALENTO'}</motion.div>
                     </motion.div>
                   );
                 })}
