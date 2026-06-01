@@ -14,13 +14,17 @@ export function useAuth() {
 
   const fetchProfile = useCallback(async (userId: string) => {
     setProfileLoading(true)
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    if (data) setProfile(data)
-    setProfileLoading(false)
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+      if (error) console.error('[useAuth] fetchProfile error:', error)
+      if (data) setProfile(data)
+    } finally {
+      setProfileLoading(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -66,13 +70,11 @@ export function useAuth() {
           ?? session.user.user_metadata?.picture
           ?? null
         if (avatarUrl) {
-          await supabase
-            .from('profiles')
-            .update({ avatar_url: avatarUrl })
-            .eq('id', session.user.id)
+          // Fire-and-forget: não bloqueia o carregamento do perfil (role/admin)
+          supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', session.user.id)
         }
 
-        fetchProfile(session.user.id)
+        await fetchProfile(session.user.id)
       } else {
         setUser(null)
         setProfile(null)
@@ -109,9 +111,14 @@ export function useAuth() {
     })
   }, [])
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(() => {
+    // Limpa o estado local imediatamente — UI responde na hora
     setDomainError(null)
-    return supabase.auth.signOut()
+    setUser(null)
+    setProfile(null)
+    setSession(null)
+    // Invalida sessão no servidor em background (não bloqueia a UI)
+    supabase.auth.signOut().catch(() => {})
   }, [])
 
   // isPending: usuario logado mas aguardando aprovacao do admin.
