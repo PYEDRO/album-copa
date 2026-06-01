@@ -5,15 +5,18 @@ import { supabase, type DbProfile } from '../lib/supabase'
 const CORPORATE_DOMAIN = (import.meta as any).env?.VITE_CORPORATE_DOMAIN ?? 'fortestecnologia.com.br'
 
 export function useAuth() {
-  const [session, setSession]               = useState<Session | null>(null)
-  const [user, setUser]                     = useState<User | null>(null)
-  const [profile, setProfile]               = useState<DbProfile | null>(null)
-  const [loading, setLoading]               = useState(true)
-  const [profileLoading, setProfileLoading] = useState(false)
-  const [domainError, setDomainError]       = useState<string | null>(null)
+  const [session, setSession]             = useState<Session | null>(null)
+  const [user, setUser]                   = useState<User | null>(null)
+  const [profile, setProfile]             = useState<DbProfile | null>(null)
+  // authLoading: ainda checando se existe sessão (load inicial)
+  const [authLoading, setAuthLoading]     = useState(true)
+  // profileLoaded: o perfil já foi buscado ao menos uma vez. Uma vez true,
+  // NUNCA volta a false num re-fetch — é isso que impede a tela de aprovação
+  // de reaparecer ao focar a aba / renovar o token.
+  const [profileLoaded, setProfileLoaded] = useState(false)
+  const [domainError, setDomainError]     = useState<string | null>(null)
 
   const fetchProfile = useCallback(async (userId: string) => {
-    setProfileLoading(true)
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -22,66 +25,93 @@ export function useAuth() {
         .single()
       if (error) console.error('[useAuth] fetchProfile error:', error)
       if (data) setProfile(data)
+    } catch (e) {
+      console.error('[useAuth] fetchProfile exception:', e)
     } finally {
-      setProfileLoading(false)
+      setProfileLoaded(true)
     }
   }, [])
 
   useEffect(() => {
-    // Timeout absoluto: garante que loading termina mesmo se tudo falhar
+    let active = true
+
+    // Garantia: o spinner nunca trava para sempre, mesmo se a rede falhar.
     const timer = setTimeout(() => {
-      console.warn('[useAuth] timeout — forçando loading=false')
-      setLoading(false)
+      if (active) setAuthLoading(false)
     }, 8000)
 
+    // Resolve uma sessão (do load inicial ou de um evento de auth) para o
+    // estado da UI. Centralizado para que login, refresh de token e foco de
+    // aba sigam exatamente o mesmo caminho.
+    const handleSession = async (nextSession: Session | null) => {
+      if (!active) return
+
+      // Sem sessão → deslogado.
+      if (!nextSession?.user) {
+        setSession(null)
+        setUser(null)
+        setProfile(null)
+        setProfileLoaded(false)
+        return
+      }
+
+      // Domínio corporativo obrigatório.
+      const email = nextSession.user.email ?? ''
+      if (!email.toLowerCase().endsWith('@' + CORPORATE_DOMAIN)) {
+        setDomainError(
+          `Apenas contas @${CORPORATE_DOMAIN} podem acessar o álbum. ` +
+          `Você entrou com "${email}".`
+        )
+        await supabase.auth.signOut()
+        setSession(null)
+        setUser(null)
+        setProfile(null)
+        setProfileLoaded(false)
+        return
+      }
+
+      setDomainError(null)
+      setSession(nextSession)
+      setUser(nextSession.user)
+
+      // Atualiza avatar em background — não bloqueia o carregamento do perfil.
+      const avatarUrl = nextSession.user.user_metadata?.avatar_url
+        ?? nextSession.user.user_metadata?.picture
+        ?? null
+      if (avatarUrl) {
+        supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', nextSession.user.id)
+      }
+
+      await fetchProfile(nextSession.user.id)
+    }
+
+    // 1) Sessão inicial (fonte de verdade no boot).
     ;(async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        setSession(session)
-        setUser(session?.user ?? null)
-        if (session?.user) fetchProfile(session.user.id)
+        await handleSession(session)
       } catch (e) {
         console.error('[useAuth] getSession error:', e)
       } finally {
-        clearTimeout(timer)
-        setLoading(false)
+        if (active) {
+          clearTimeout(timer)
+          setAuthLoading(false)
+        }
       }
     })()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session)
-
-      if (session?.user) {
-        const email = session.user.email ?? ''
-        if (!email.toLowerCase().endsWith('@' + CORPORATE_DOMAIN)) {
-          setDomainError(
-            `Apenas contas @${CORPORATE_DOMAIN} podem acessar o album. ` +
-            `Voce entrou com "${email}".`
-          )
-          await supabase.auth.signOut()
-          setUser(null)
-          setProfile(null)
-          return
-        }
-        setDomainError(null)
-        setUser(session.user)
-
-        const avatarUrl = session.user.user_metadata?.avatar_url
-          ?? session.user.user_metadata?.picture
-          ?? null
-        if (avatarUrl) {
-          // Fire-and-forget: não bloqueia o carregamento do perfil (role/admin)
-          supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', session.user.id)
-        }
-
-        await fetchProfile(session.user.id)
-      } else {
-        setUser(null)
-        setProfile(null)
-      }
+    // 2) Mudanças subsequentes (login, logout, refresh de token, foco de aba).
+    //    Ignoramos INITIAL_SESSION para não duplicar o fetch do boot acima.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'INITIAL_SESSION') return
+      handleSession(nextSession)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      active = false
+      clearTimeout(timer)
+      subscription.unsubscribe()
+    }
   }, [fetchProfile])
 
   const signUp = useCallback(async (email: string, password: string, name: string) => {
@@ -112,19 +142,24 @@ export function useAuth() {
   }, [])
 
   const signOut = useCallback(() => {
-    // Limpa o estado local imediatamente — UI responde na hora
+    // Limpa o estado local imediatamente — UI responde na hora.
     setDomainError(null)
     setUser(null)
     setProfile(null)
     setSession(null)
-    // Invalida sessão no servidor em background (não bloqueia a UI)
+    setProfileLoaded(false)
+    // Invalida a sessão no servidor em background (não bloqueia a UI).
     supabase.auth.signOut().catch(() => {})
   }, [])
 
-  // isPending: usuario logado mas aguardando aprovacao do admin.
-  // Enquanto profileLoading=true, bloqueia para nao renderizar o app
-  // antes de confirmar o status de aprovacao.
-  const isPending = !!user && (profileLoading || (!!profile && profile.approved === false))
+  // loading: enquanto não sabemos a sessão, OU temos usuário mas o perfil
+  // (que decide aprovação) ainda não chegou. Mantém o spinner em vez de
+  // mostrar a tela de aprovação prematuramente.
+  const loading = authLoading || (!!user && !profileLoaded)
+
+  // isPending: SÓ é true quando temos certeza — perfil carregado e
+  // approved === false. Nunca durante uma transição de carregamento.
+  const isPending = !!user && profileLoaded && !!profile && profile.approved === false
 
   return {
     session,
