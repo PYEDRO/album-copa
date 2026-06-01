@@ -100,10 +100,12 @@ export function useAuth() {
       }
     })()
 
-    // 2) Mudanças subsequentes (login, logout, refresh de token, foco de aba).
-    //    Ignoramos INITIAL_SESSION para não duplicar o fetch do boot acima.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      if (event === 'INITIAL_SESSION') return
+    // 2) Eventos de auth. IMPORTANTE: tratamos TODOS, incluindo INITIAL_SESSION
+    //    — é por esse evento que o Supabase entrega a sessão do retorno do
+    //    OAuth do Google numa carga nova de página. Ignorá-lo fazia o login
+    //    com Google falhar (voltava ao splash deslogado). O profileLoaded
+    //    evita re-fetch redundante reabrir a tela de aprovação.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       handleSession(nextSession)
     })
 
