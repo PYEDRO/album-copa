@@ -1,5 +1,10 @@
 import { Rarity, Collaborator, UserStats } from './types';
 
+// Limite máximo de figurinhas do álbum. O roster real (tabela `stickers` no
+// banco) é a fonte de verdade; este valor é o teto que o álbum exibe e que o
+// admin pode cadastrar.
+export const MAX_STICKERS = 80;
+
 export const TEAMS = [
   'Esquadrão Code Builders',
   'Liga dos Guardiões',

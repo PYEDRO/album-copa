@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { supabase, type DbSticker } from '../lib/supabase'
+import { MAX_STICKERS } from '../constants'
 
 export interface AdminUser {
   id: string
@@ -147,6 +148,13 @@ export function useAdmin() {
 
   // Sticker CRUD
   const createSticker = useCallback(async (sticker: Omit<DbSticker, 'id'> & { id?: string }) => {
+    // Cap de MAX_STICKERS: nunca cadastrar além do limite do álbum.
+    const { count } = await supabase
+      .from('stickers')
+      .select('*', { count: 'exact', head: true })
+    if ((count ?? 0) >= MAX_STICKERS) {
+      return { message: `Limite de ${MAX_STICKERS} figurinhas atingido. Exclua uma antes de adicionar outra.` }
+    }
     const id = sticker.id?.trim() || ('s' + Date.now())
     const { error } = await supabase.from('stickers').insert({ ...sticker, id })
     return error

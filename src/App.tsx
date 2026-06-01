@@ -9,7 +9,7 @@ import fortesLogo from './public/fortes-logo.png';
 import AdminDashboard from './components/AdminDashboard';
 import AdminStickerEditor from './components/AdminStickerEditor';
 import TradeSystem from './components/TradeSystem';
-import { COLLABORATORS } from './constants';
+import { COLLABORATORS, MAX_STICKERS } from './constants';
 import { Rarity, type Collaborator } from './types';
 import { useAuth } from './hooks/useAuth';
 import { usePacks } from './hooks/usePacks';
@@ -372,12 +372,17 @@ export default function App() {
   useEffect(() => { localStorage.setItem('game_stats', JSON.stringify(localGameStats)); }, [localGameStats]);
 
   const allCollaborators = useMemo((): Collaborator[] => {
-    const dbById = new Map(packs.stickers.map(s => [s.id, toCollaborator(s)]));
-    // DB takes priority over static constants for matching IDs
-    const merged = COLLABORATORS.map(c => dbById.get(c.id) ?? c);
-    const staticIds = new Set(COLLABORATORS.map(c => c.id));
-    const extras = packs.stickers.filter(s => !staticIds.has(s.id)).map(toCollaborator);
-    return [...merged, ...extras];
+    // O roster real é a tabela `stickers` do banco. Antes da carga inicial
+    // (banco vazio) usamos os placeholders só para não quebrar o jogo.
+    if (packs.stickers.length === 0) return COLLABORATORS.slice(0, MAX_STICKERS);
+    return packs.stickers
+      .map(toCollaborator)
+      .sort((a, b) => {
+        const na = Number(a.id), nb = Number(b.id);
+        if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+        return String(a.id).localeCompare(String(b.id));
+      })
+      .slice(0, MAX_STICKERS);
   }, [packs.stickers]);
 
   const TOTAL_PAGES = Math.ceil(allCollaborators.length / STICKERS_PER_PAGE);
@@ -507,7 +512,7 @@ export default function App() {
         <div className="hidden lg:flex items-center gap-4">
           <div className="bg-red-800/40 px-4 py-2 rounded-lg border border-red-400/20">
             <p className="text-[10px] text-red-200 uppercase tracking-widest font-black">Coleção</p>
-            <p className="text-lg font-black text-white leading-tight">{packs.uniqueOwned} <span className="text-red-300 text-xs font-bold">/ {packs.totalStickers || allCollaborators.length}</span></p>
+            <p className="text-lg font-black text-white leading-tight">{packs.uniqueOwned} <span className="text-red-300 text-xs font-bold">/ {allCollaborators.length}</span></p>
           </div>
         </div>
         <div className="flex items-center gap-2">
