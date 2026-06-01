@@ -1,17 +1,16 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase, type DbLeaderboardEntry } from '../lib/supabase'
 
-// Intervalo de polling em ms — 10s como fallback
-const POLL_INTERVAL_MS = 10_000
+// Polling a cada 60s — ranking não precisa de atualização em tempo real
+const POLL_INTERVAL_MS = 60_000
 
 export function useLeaderboard() {
   const [entries, setEntries] = useState<DbLeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const initialized = useRef(false)
   const isFetching = useRef(false)
 
-  /** Busca o cache local (leaderboard_cache) */
+  /** Lê o cache já calculado (leitura simples, sem RPC pesado) */
   const fetchLeaderboard = useCallback(async () => {
     if (isFetching.current) return
     isFetching.current = true
@@ -30,7 +29,7 @@ export function useLeaderboard() {
     }
   }, [])
 
-  /** Força recalcular o ranking no banco (RPC) e depois busca os dados atualizados */
+  /** Recalcula o ranking no banco (RPC) — só chamado pelo botão manual */
   const forceRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
@@ -42,33 +41,13 @@ export function useLeaderboard() {
   }, [fetchLeaderboard])
 
   useEffect(() => {
-    if (!initialized.current) {
-      initialized.current = true
-      // Na primeira carga, força refresh para garantir dados atuais
-      forceRefresh()
-    }
+    // Carga inicial: só lê o cache, sem recalcular
+    fetchLeaderboard()
 
-    const channel = supabase
-      .channel('leaderboard-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'leaderboard_cache' },
-        () => { fetchLeaderboard() },
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'user_stickers' },
-        () => { fetchLeaderboard() },
-      )
-      .subscribe()
-
-    const fallbackInterval = setInterval(fetchLeaderboard, POLL_INTERVAL_MS)
-
-    return () => {
-      supabase.removeChannel(channel)
-      clearInterval(fallbackInterval)
-    }
-  }, [fetchLeaderboard, forceRefresh])
+    // Polling leve como fallback (sem WebSocket para evitar erros no StrictMode)
+    const interval = setInterval(fetchLeaderboard, POLL_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [fetchLeaderboard])
 
   return { entries, loading, refreshing, refetch: fetchLeaderboard, forceRefresh }
 }
