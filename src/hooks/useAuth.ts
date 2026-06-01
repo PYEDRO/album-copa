@@ -24,14 +24,25 @@ export function useAuth() {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
+    // Timeout absoluto: garante que loading termina mesmo se tudo falhar
+    const timer = setTimeout(() => {
+      console.warn('[useAuth] timeout — forçando loading=false')
+      setLoading(false)
+    }, 8000)
+
+    ;(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
         setSession(session)
         setUser(session?.user ?? null)
         if (session?.user) fetchProfile(session.user.id)
-      })
-      .catch((e) => console.error('[useAuth] getSession error:', e))
-      .finally(() => setLoading(false))
+      } catch (e) {
+        console.error('[useAuth] getSession error:', e)
+      } finally {
+        clearTimeout(timer)
+        setLoading(false)
+      }
+    })()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session)
