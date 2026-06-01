@@ -1,16 +1,17 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase, type DbLeaderboardEntry } from '../lib/supabase'
 
-// Intervalo de polling em ms — 5s para atualizações mais rápidas
-const POLL_INTERVAL_MS = 5_000
+// Intervalo de polling em ms — 10s como fallback
+const POLL_INTERVAL_MS = 10_000
 
 export function useLeaderboard() {
   const [entries, setEntries] = useState<DbLeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const initialized = useRef(false)
-  // Evita múltiplas requisições simultâneas
   const isFetching = useRef(false)
 
+  /** Busca o cache local (leaderboard_cache) */
   const fetchLeaderboard = useCallback(async () => {
     if (isFetching.current) return
     isFetching.current = true
@@ -29,14 +30,24 @@ export function useLeaderboard() {
     }
   }, [])
 
+  /** Força recalcular o ranking no banco (RPC) e depois busca os dados atualizados */
+  const forceRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await supabase.rpc('refresh_leaderboard')
+      await fetchLeaderboard()
+    } finally {
+      setRefreshing(false)
+    }
+  }, [fetchLeaderboard])
+
   useEffect(() => {
     if (!initialized.current) {
       initialized.current = true
-      fetchLeaderboard()
+      // Na primeira carga, força refresh para garantir dados atuais
+      forceRefresh()
     }
 
-    // Supabase Realtime: reage imediatamente a qualquer mudança na tabela
-    // Requer Replication habilitado no Supabase Studio para essa tabela
     const channel = supabase
       .channel('leaderboard-realtime')
       .on(
@@ -44,7 +55,6 @@ export function useLeaderboard() {
         { event: '*', schema: 'public', table: 'leaderboard_cache' },
         () => { fetchLeaderboard() },
       )
-      // Também escuta mudanças em user_stickers para refletir novo pack instantaneamente
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'user_stickers' },
@@ -52,14 +62,13 @@ export function useLeaderboard() {
       )
       .subscribe()
 
-    // Polling de 5s como fallback (caso Realtime não esteja habilitado no plano)
     const fallbackInterval = setInterval(fetchLeaderboard, POLL_INTERVAL_MS)
 
     return () => {
       supabase.removeChannel(channel)
       clearInterval(fallbackInterval)
     }
-  }, [fetchLeaderboard])
+  }, [fetchLeaderboard, forceRefresh])
 
-  return { entries, loading, refetch: fetchLeaderboard }
+  return { entries, loading, refreshing, refetch: fetchLeaderboard, forceRefresh }
 }

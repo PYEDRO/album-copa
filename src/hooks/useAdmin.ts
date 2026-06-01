@@ -176,7 +176,7 @@ export function useAdmin() {
       .upload(path, file, { upsert: true, contentType: file.type })
     if (error) { console.error('Upload error', error); return null }
     const { data } = supabase.storage.from('sticker-images').getPublicUrl(path)
-    return data.publicUrl
+    return data.publicUrl + '?t=' + Date.now()
   }, [])
 
   const pendingUsers = users.filter(u => u.approved === false)

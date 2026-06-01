@@ -163,9 +163,10 @@ export default function AdminDashboard() {
                 <div key={user.id} className="flex items-center justify-between px-6 py-4 gap-4 flex-wrap">
                   <div className="flex items-center gap-3">
                     <img
-                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`}
+                      src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`}
                       alt={user.name}
-                      className="w-10 h-10 rounded-full bg-amber-100 border-2 border-amber-200"
+                      referrerPolicy="no-referrer"
+                      className="w-10 h-10 rounded-full bg-amber-100 border-2 border-amber-200 object-cover"
                     />
                     <div>
                       <p className="font-black text-slate-800 text-sm">{user.name}</p>
@@ -253,9 +254,10 @@ export default function AdminDashboard() {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <img
-                        src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`}
+                        src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`}
                         alt={user.name}
-                        className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200"
+                        referrerPolicy="no-referrer"
+                        className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 object-cover"
                       />
                       <span className="font-bold text-slate-800 truncate max-w-[160px]">{user.name}</span>
                     </div>

@@ -12,11 +12,22 @@ export function usePacks(userId: string | undefined) {
   const [packsRemaining, setPacksRemaining] = useState<number>(MAX_PACKS_PER_DAY)
 
   // Fetch full sticker catalog
-  useEffect(() => {
-    supabase.from('stickers').select('*').then(({ data }) => {
-      if (data) setStickers(data)
-    })
+  const fetchStickers = useCallback(async () => {
+    const { data } = await supabase.from('stickers').select('*').order('id')
+    if (data) setStickers(data)
   }, [])
+
+  useEffect(() => {
+    fetchStickers()
+
+    // Realtime: atualiza catálogo quando admin edita/cria/remove figurinhas
+    const channel = supabase
+      .channel('stickers-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stickers' }, fetchStickers)
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [fetchStickers])
 
   // Fetch server-side pack status (removes localStorage dependency)
   const fetchPackStatus = useCallback(async () => {

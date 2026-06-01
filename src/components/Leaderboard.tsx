@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { motion } from 'motion/react'
 import { Trophy, Loader2, Crown, Medal, RefreshCw } from 'lucide-react'
 import { useLeaderboard } from '../hooks/useLeaderboard'
@@ -15,14 +15,7 @@ const RANK_ICONS: Record<number, React.ReactNode> = {
 }
 
 export default function Leaderboard({ currentUser }: Props) {
-  const { entries, loading, refetch } = useLeaderboard()
-  const [refreshing, setRefreshing] = useState(false)
-
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    await refetch()
-    setRefreshing(false)
-  }
+  const { entries, loading, refreshing, forceRefresh } = useLeaderboard()
 
   if (loading) {
     return (
@@ -46,12 +39,12 @@ export default function Leaderboard({ currentUser }: Props) {
           Top 100 coletores — atualizado a cada 30 segundos
         </p>
         <button
-          onClick={handleRefresh}
+          onClick={forceRefresh}
           disabled={refreshing}
-          className="mx-auto flex items-center gap-2 text-xs font-black uppercase text-red-400 hover:text-red-600 transition-colors disabled:opacity-50"
+          className="mx-auto flex items-center gap-2 px-4 py-2 rounded-full bg-red-600 text-white text-xs font-black uppercase tracking-wider hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
         >
           <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
-          Atualizar agora
+          {refreshing ? 'Atualizando...' : 'Atualizar Ranking'}
         </button>
       </div>
 
@@ -107,11 +100,14 @@ export default function Leaderboard({ currentUser }: Props) {
                   )}
                 </div>
                 <div className="col-span-5 flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${
-                    isSelf ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {entry.name.charAt(0).toUpperCase()}
-                  </div>
+                  <img
+                    src={entry.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(entry.name)}`}
+                    alt={entry.name}
+                    referrerPolicy="no-referrer"
+                    className={`w-8 h-8 rounded-full object-cover border-2 ${
+                      isSelf ? 'border-red-600' : 'border-slate-200'
+                    }`}
+                  />
                   <span className={`text-sm font-bold truncate max-w-[120px] ${isSelf ? 'text-red-700' : 'text-slate-700'}`}>
                     {entry.name} {isSelf && <span className="text-[9px] text-red-400 font-black">(você)</span>}
                   </span>

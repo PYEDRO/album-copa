@@ -48,6 +48,17 @@ export function useAuth() {
         }
         setDomainError(null)
         setUser(session.user)
+
+        const avatarUrl = session.user.user_metadata?.avatar_url
+          ?? session.user.user_metadata?.picture
+          ?? null
+        if (avatarUrl) {
+          await supabase
+            .from('profiles')
+            .update({ avatar_url: avatarUrl })
+            .eq('id', session.user.id)
+        }
+
         fetchProfile(session.user.id)
       } else {
         setUser(null)

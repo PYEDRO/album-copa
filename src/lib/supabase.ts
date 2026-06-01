@@ -30,6 +30,7 @@ export type DbProfile = {
   score: number
   pity_counter: number
   last_pack_at: string | null
+  avatar_url: string | null
   /** false = aguardando aprovação admin; true (ou null/undefined em BDs legados) = aprovado */
   approved: boolean | null
 }
@@ -56,5 +57,6 @@ export type DbLeaderboardEntry = {
   name: string
   score: number
   total_stickers: number
+  avatar_url: string | null
   updated_at: string
 }
