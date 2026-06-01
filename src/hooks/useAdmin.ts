@@ -161,9 +161,9 @@ export function useAdmin() {
   }, [])
 
   const deleteSticker = useCallback(async (id: string) => {
-    // Remove primeiro do inventário dos usuários (FK sem CASCADE)
-    // O admin tem permissão via RLS "Admins can delete any user_stickers"
-    await supabase.from('user_stickers').delete().eq('sticker_id', id)
+    // Os FKs de user_stickers/game_claims/quiz_questions têm ON DELETE
+    // CASCADE/SET NULL (migration 014), então o banco remove as dependências
+    // automaticamente ao excluir a figurinha.
     const { error } = await supabase.from('stickers').delete().eq('id', id)
     return error
   }, [])
