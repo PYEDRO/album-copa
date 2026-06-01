@@ -441,19 +441,29 @@ export default function App() {
     }
   }, [auth.user, packs]);
 
-  const startNewGame = () => {
+  const startNewGame = async () => {
     if (!isWindowOpen) {
       setGameState({ target: null, attemptsRemaining: 1, options: [], feedback: `O jogo fica disponível das 12:00 às 23:59 (horário de Fortaleza).`, won: false, canPlay: false });
       setView('game');
       return;
     }
     const today = new Date().toISOString().split('T')[0];
-    const isToday = localGameStats.lastGuessDate === today;
-    const dailyCount = isToday ? (localGameStats.dailyGuessCount ?? 0) : 0;
-    if (isToday && dailyCount >= MAX_GUESSES_PER_DAY) {
-      setGameState(p => ({ ...p, feedback: `Você já jogou ${MAX_GUESSES_PER_DAY} vezes hoje! Volte amanhã.`, canPlay: false }));
-      setView('game'); return;
+
+    // Limite AUTORITATIVO no servidor (por USUÁRIO, vale em qualquer aparelho):
+    // conta as figurinhas já ganhas no jogo hoje. Como game_claims é gravado no
+    // banco, trocar de celular/PC NÃO zera o contador — fecha o farm multi-device.
+    if (auth.user) {
+      const { count, error } = await supabase
+        .from('game_claims')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', auth.user.id)
+        .eq('claim_date', today);
+      if (!error && (count ?? 0) >= MAX_GUESSES_PER_DAY) {
+        setGameState(p => ({ ...p, feedback: `Você já ganhou ${MAX_GUESSES_PER_DAY} figurinhas no jogo hoje! Volte amanhã.`, canPlay: false }));
+        setView('game'); return;
+      }
     }
+
     setGameReward(null);
     const pool = packs.stickers.length > 0 ? packs.stickers.map(toCollaborator) : allCollaborators;
     const target = pool[Math.floor(Math.random() * pool.length)];
