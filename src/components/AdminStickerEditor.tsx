@@ -438,11 +438,15 @@ export default function AdminStickerEditor() {
       if (imageFile) {
         const stickerId = (editingId ?? form.id ?? `s${Date.now()}`).trim() || `s${Date.now()}`
         setUploadProgress(true)
-        const uploaded = await admin.uploadStickerImage(imageFile, stickerId)
-        setUploadProgress(false)
-        if (!uploaded) throw new Error('Falha no upload da imagem. Verifique o bucket no Supabase.')
+        let uploaded: string | null = null
+        try {
+          uploaded = await admin.uploadStickerImage(imageFile, stickerId)
+        } finally {
+          setUploadProgress(false)
+        }
+        if (!uploaded) throw new Error('Falha no upload da imagem. Verifique o bucket "sticker-images" e as políticas RLS no Supabase Storage.')
         imageUrl = uploaded
-        setForm(f => ({ ...f, image_url: uploaded, id: stickerId }))
+        setForm(f => ({ ...f, image_url: uploaded!, id: stickerId }))
       }
 
       const payload: Partial<DbSticker> = { ...form, image_url: imageUrl }

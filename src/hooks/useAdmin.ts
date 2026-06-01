@@ -171,10 +171,25 @@ export function useAdmin() {
   const uploadStickerImage = useCallback(async (file: File, stickerId: string): Promise<string | null> => {
     const ext  = file.name.split('.').pop() ?? 'jpg'
     const path = 'stickers/' + stickerId + '.' + ext
-    const { error } = await supabase.storage
+
+    const uploadPromise = supabase.storage
       .from('sticker-images')
       .upload(path, file, { upsert: true, contentType: file.type })
-    if (error) { console.error('Upload error', error); return null }
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(
+        'Timeout de upload (20s). Verifique se o bucket "sticker-images" existe no Supabase Storage e se as políticas de RLS permitem INSERT/UPDATE para admins.'
+      )), 20_000)
+    )
+
+    try {
+      const { error } = await Promise.race([uploadPromise, timeoutPromise])
+      if (error) { console.error('Upload error:', error); return null }
+    } catch (e) {
+      console.error('Upload falhou:', e)
+      return null
+    }
+
     const { data } = supabase.storage.from('sticker-images').getPublicUrl(path)
     return data.publicUrl + '?t=' + Date.now()
   }, [])
