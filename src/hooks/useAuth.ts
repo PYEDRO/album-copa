@@ -74,15 +74,22 @@ export function useAuth() {
       setSession(nextSession)
       setUser(nextSession.user)
 
-      // Atualiza avatar em background — não bloqueia o carregamento do perfil.
+      // Foto do Google (vem em avatar_url ou picture).
       const avatarUrl = nextSession.user.user_metadata?.avatar_url
         ?? nextSession.user.user_metadata?.picture
         ?? null
-      if (avatarUrl) {
-        supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', nextSession.user.id)
-      }
 
       await fetchProfile(nextSession.user.id)
+
+      // Garante que a foto do Google apareça e fique salva. Antes havia uma
+      // corrida: o update não era aguardado e o fetchProfile lia o avatar ainda
+      // nulo. Agora corrigimos o estado local na hora e persistimos no banco.
+      if (avatarUrl) {
+        setProfile(prev => (prev && prev.avatar_url !== avatarUrl)
+          ? { ...prev, avatar_url: avatarUrl }
+          : prev)
+        supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', nextSession.user.id)
+      }
     }
 
     // 1) Sessão inicial (fonte de verdade no boot).
