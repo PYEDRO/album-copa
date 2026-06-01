@@ -19,14 +19,9 @@ export function usePacks(userId: string | undefined) {
 
   useEffect(() => {
     fetchStickers()
-
-    // Realtime: atualiza catálogo quando admin edita/cria/remove figurinhas
-    const channel = supabase
-      .channel('stickers-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stickers' }, fetchStickers)
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
+    // Polling a cada 30s para refletir mudanças do admin sem WebSocket
+    const interval = setInterval(fetchStickers, 30_000)
+    return () => clearInterval(interval)
   }, [fetchStickers])
 
   // Fetch server-side pack status (removes localStorage dependency)
