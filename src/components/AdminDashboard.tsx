@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import {
   Users, Activity, Package, Star, Shield, UserX,
   RefreshCw, ChevronUp, ChevronDown, Loader2, BarChart3,
-  CheckCircle2, XCircle, Clock,
+  CheckCircle2, XCircle, Clock, Trophy,
 } from 'lucide-react'
 import { useAdmin, type AdminUser } from '../hooks/useAdmin'
 
@@ -113,7 +113,7 @@ export default function AdminDashboard() {
           </p>
         </div>
         <button
-          onClick={() => { admin.fetchMetrics(); admin.fetchUsers() }}
+          onClick={() => { admin.fetchMetrics(); admin.fetchUsers(); admin.fetchWinners() }}
           disabled={admin.loading}
           className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl font-black text-sm transition-all disabled:opacity-50"
         >
@@ -139,6 +139,63 @@ export default function AdminDashboard() {
         <MetricCard label="Catálogo" value={admin.metrics.uniqueStickers}
           icon={Star} color="bg-slate-600" sub="figurinhas únicas" />
       </div>
+
+      {/* ── 🏆 Vencedores do Álbum ───────────────────────────── */}
+      <AnimatePresence>
+        {admin.winners.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-300 rounded-2xl overflow-hidden shadow-md"
+          >
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-yellow-200 bg-yellow-100">
+              <Trophy size={20} className="text-yellow-600" />
+              <h3 className="text-base font-black italic uppercase tracking-tighter text-yellow-800">
+                Álbum Completo — Vencedores!
+              </h3>
+              <span className="ml-auto bg-yellow-500 text-white text-xs font-black px-2 py-0.5 rounded-full">
+                {admin.winners.length}
+              </span>
+            </div>
+            <div className="divide-y divide-yellow-100">
+              {admin.winners.map(winner => (
+                <div key={winner.id} className="flex items-center justify-between px-6 py-4 gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-yellow-400 text-white font-black text-sm shadow-sm">
+                      {winner.position}º
+                    </div>
+                    <div>
+                      <p className="font-black text-slate-800 text-sm flex items-center gap-2">
+                        {winner.name}
+                        {winner.position === 1 && <span className="text-yellow-600">🏆 1º lugar</span>}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        Completou {winner.total_stickers} figurinhas em{' '}
+                        {new Date(winner.completed_at).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                  </div>
+                  {!winner.acknowledged && (
+                    <button
+                      onClick={() => admin.acknowledgeWinner(winner.id)}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-yellow-600 hover:bg-yellow-500 text-white font-black text-xs uppercase transition-all shadow-sm"
+                    >
+                      <CheckCircle2 size={14} />
+                      Marcar como visto
+                    </button>
+                  )}
+                  {winner.acknowledged && (
+                    <span className="text-[10px] font-black uppercase text-yellow-600/70 flex items-center gap-1">
+                      <CheckCircle2 size={12} /> Visto
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Aprovações Pendentes ─────────────────────────────── */}
       <AnimatePresence>

@@ -24,12 +24,23 @@ export interface AdminMetrics {
   uniqueStickers: number
 }
 
+export interface GameWinner {
+  id: string
+  user_id: string
+  name: string
+  position: number
+  total_stickers: number
+  completed_at: string
+  acknowledged: boolean
+}
+
 export function useAdmin() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [metrics, setMetrics] = useState<AdminMetrics>({
     totalUsers: 0, activeToday: 0, activeLast7Days: 0,
     packsOpenedToday: 0, totalStickersIssued: 0, uniqueStickers: 0,
   })
+  const [winners, setWinners] = useState<GameWinner[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -110,10 +121,29 @@ export function useAdmin() {
     })))
   }, [])
 
+  // ── Vencedores (álbum completo) ─────────────────────────────
+  const fetchWinners = useCallback(async () => {
+    const { data } = await supabase
+      .from('game_winners')
+      .select('id, user_id, name, position, total_stickers, completed_at, acknowledged')
+      .order('position', { ascending: true })
+    setWinners((data ?? []) as GameWinner[])
+  }, [])
+
+  const acknowledgeWinner = useCallback(async (id: string) => {
+    const { error } = await supabase
+      .from('game_winners')
+      .update({ acknowledged: true })
+      .eq('id', id)
+    if (!error) await fetchWinners()
+    return error
+  }, [fetchWinners])
+
   useEffect(() => {
     fetchMetrics()
     fetchUsers()
-  }, [fetchMetrics, fetchUsers])
+    fetchWinners()
+  }, [fetchMetrics, fetchUsers, fetchWinners])
 
   const promoteUser = useCallback(async (userId: string) => {
     const { error } = await supabase.from('profiles').update({ role: 'ADMIN' }).eq('id', userId)
@@ -207,11 +237,14 @@ export function useAdmin() {
   return {
     users,
     pendingUsers,
+    winners,
     metrics,
     loading,
     error,
     fetchMetrics,
     fetchUsers,
+    fetchWinners,
+    acknowledgeWinner,
     promoteUser,
     demoteUser,
     resetUserCollection,
