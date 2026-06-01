@@ -365,7 +365,7 @@ export default function App() {
 
   // ── Pack status vem do servidor via usePacks ─────────────────
   const packsRemaining = packs.packsRemaining;
-  const [gameState, setGameState] = useState<GameState>({ target: null, attemptsRemaining: 2, options: [], feedback: null, won: false, canPlay: true });
+  const [gameState, setGameState] = useState<GameState>({ target: null, attemptsRemaining: 1, options: [], feedback: null, won: false, canPlay: true });
   const [gameReward, setGameReward] = useState<DbSticker | null>(null);
   const [gameRewardClaiming, setGameRewardClaiming] = useState(false);
 
@@ -443,7 +443,7 @@ export default function App() {
 
   const startNewGame = () => {
     if (!isWindowOpen) {
-      setGameState({ target: null, attemptsRemaining: 2, options: [], feedback: `O jogo fica disponível das 12:00 às 23:59 (horário de Fortaleza).`, won: false, canPlay: false });
+      setGameState({ target: null, attemptsRemaining: 1, options: [], feedback: `O jogo fica disponível das 12:00 às 23:59 (horário de Fortaleza).`, won: false, canPlay: false });
       setView('game');
       return;
     }
@@ -459,7 +459,7 @@ export default function App() {
     const target = pool[Math.floor(Math.random() * pool.length)];
     const opts = [target];
     while (opts.length < 4) { const o = pool[Math.floor(Math.random() * pool.length)]; if (!opts.find(x => x.id === o.id)) opts.push(o); }
-    setGameState({ target, attemptsRemaining: 2, options: opts.sort(() => Math.random() - 0.5), feedback: null, won: false, canPlay: true });
+    setGameState({ target, attemptsRemaining: 1, options: opts.sort(() => Math.random() - 0.5), feedback: null, won: false, canPlay: true });
     setView('game');
   };
 
@@ -671,7 +671,7 @@ export default function App() {
                           </motion.div>
                         )}
                         <div className="flex items-center justify-between pt-6">
-                          <div className="flex gap-2">{[...Array(2)].map((_, i) => (<div key={i} className={`w-3 h-3 rounded-full ${i < gameState.attemptsRemaining ? 'bg-red-600 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-slate-200'}`} />))}</div>
+                          <div className="flex gap-2">{[...Array(1)].map((_, i) => (<div key={i} className={`w-3 h-3 rounded-full ${i < gameState.attemptsRemaining ? 'bg-red-600 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-slate-200'}`} />))}</div>
                           {(gameState.won || gameState.attemptsRemaining === 0) && (
                             <button onClick={startNewGame} className="text-red-600 hover:text-red-700 font-black italic uppercase tracking-widest flex items-center gap-2 group text-xs">Próximo Cartão <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" /></button>
                           )}
