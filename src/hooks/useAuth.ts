@@ -4,6 +4,22 @@ import { supabase, type DbProfile } from '../lib/supabase'
 
 const CORPORATE_DOMAIN = (import.meta as any).env?.VITE_CORPORATE_DOMAIN ?? 'fortestecnologia.com.br'
 
+// Exceções: emails liberados mesmo sem o domínio corporativo.
+// Fonte 1: variável de ambiente VITE_EXTRA_ALLOWED_EMAILS (separados por vírgula).
+// Fonte 2: a lista fixa abaixo (para casos pontuais aprovados).
+const HARDCODED_ALLOWED_EMAILS: string[] = [
+  'jorge@grupofortes.com.br',
+  'sabino@grupofortes.com.br',
+]
+const EXTRA_ALLOWED_EMAILS = new Set(
+  [
+    ...String((import.meta as any).env?.VITE_EXTRA_ALLOWED_EMAILS ?? '').split(','),
+    ...HARDCODED_ALLOWED_EMAILS,
+  ]
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean),
+)
+
 export function useAuth() {
   const [session, setSession]             = useState<Session | null>(null)
   const [user, setUser]                   = useState<User | null>(null)
@@ -55,9 +71,11 @@ export function useAuth() {
         return
       }
 
-      // Domínio corporativo obrigatório.
-      const email = nextSession.user.email ?? ''
-      if (!email.toLowerCase().endsWith('@' + CORPORATE_DOMAIN)) {
+      // Domínio corporativo obrigatório — exceto emails na allowlist.
+      const email = (nextSession.user.email ?? '').toLowerCase()
+      const isCorporate = email.endsWith('@' + CORPORATE_DOMAIN)
+      const isAllowedException = EXTRA_ALLOWED_EMAILS.has(email)
+      if (!isCorporate && !isAllowedException) {
         setDomainError(
           `Apenas contas @${CORPORATE_DOMAIN} podem acessar o álbum. ` +
           `Você entrou com "${email}".`
