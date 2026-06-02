@@ -88,7 +88,7 @@ Deno.serve(async (req: Request) => {
     const brt = new Date(Date.now() - 3 * 60 * 60 * 1000) // UTC-3 (Fortaleza, sem horário de verão)
     brt.setUTCHours(brt.getUTCHours() - 12)                // vira ao meio-dia
     const today = brt.toISOString().split('T')[0]
-    const MAX_PACKS_PER_DAY = 2
+    const MAX_PACKS_PER_DAY = 1
 
     const { count: packsToday, error: countError } = await supabaseAdmin
       .from('daily_claims')

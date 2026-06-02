@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase, type DbSticker, type DbUserSticker } from '../lib/supabase'
 
-const MAX_PACKS_PER_DAY = 2
+const MAX_PACKS_PER_DAY = 1
 
 export function usePacks(userId: string | undefined) {
   const [stickers, setStickers]             = useState<DbSticker[]>([])
