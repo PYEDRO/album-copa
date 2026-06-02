@@ -82,9 +82,12 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Rate limiting 100% server-side via daily_claims ──────
-    // "Hoje" no fuso de Fortaleza (UTC-3), igual ao RPC claim_daily_pack.
-    // Antes usava UTC, fazendo o dia virar 21:00 BRT (reset 3h cedo).
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Fortaleza' })
+    // "Dia do pack" no fuso de Fortaleza, virando às 12:00 (meio-dia): os 2
+    // packs renovam ao meio-dia, não à meia-noite. Subtrai 12h da hora local
+    // antes de extrair a data — igual ao RPC (current_pack_day).
+    const brt = new Date(Date.now() - 3 * 60 * 60 * 1000) // UTC-3 (Fortaleza, sem horário de verão)
+    brt.setUTCHours(brt.getUTCHours() - 12)                // vira ao meio-dia
+    const today = brt.toISOString().split('T')[0]
     const MAX_PACKS_PER_DAY = 2
 
     const { count: packsToday, error: countError } = await supabaseAdmin
