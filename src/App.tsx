@@ -414,12 +414,12 @@ export default function App() {
     refetchLeaderboard();
   };
 
-  const claimGameReward = useCallback(async (): Promise<DbSticker | null> => {
-    if (!auth.user) return null;
+  const claimGameReward = useCallback(async (): Promise<{ sticker: DbSticker | null; reason: string | null }> => {
+    if (!auth.user) return { sticker: null, reason: 'NO_USER' };
     setGameRewardClaiming(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return null;
+      if (!session) return { sticker: null, reason: 'NO_SESSION' };
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const res = await fetch(`${supabaseUrl}/functions/v1/claim-game-reward`, {
         method: 'POST',
@@ -431,11 +431,12 @@ export default function App() {
       const json = await res.json();
       if (res.ok && json.success && json.sticker) {
         await packs.refetchInventory();
-        return json.sticker as DbSticker;
+        return { sticker: json.sticker as DbSticker, reason: null };
       }
-      return null;
+      // Servidor recusou (limite diário, álbum completo, etc.) — devolve o motivo
+      return { sticker: null, reason: json?.error ?? 'UNKNOWN' };
     } catch {
-      return null;
+      return { sticker: null, reason: 'NETWORK' };
     } finally {
       setGameRewardClaiming(false);
     }
@@ -477,13 +478,29 @@ export default function App() {
     if (gameState.won || gameState.attemptsRemaining <= 0) return;
     const today = new Date().toISOString().split('T')[0];
     if (guessId === gameState.target?.id) {
-      setGameState(p => ({ ...p, won: true, feedback: 'Excelente! Você reconheceu o talento!' }));
+      setGameState(p => ({ ...p, won: true, feedback: 'Acertou! Buscando sua figurinha...' }));
       setLocalGameStats(p => {
         const isToday = p.lastGuessDate === today;
         return { ...p, guessesRight: p.guessesRight + 1, guessesTotal: p.guessesTotal + 1, lastGuessDate: today, dailyGuessCount: (isToday ? (p.dailyGuessCount ?? 0) : 0) + 1 };
       });
       setGameReward(null);
-      claimGameReward().then(sticker => { if (sticker) setGameReward(sticker); });
+      // SÓ confirma "ganhou a figurinha" depois que o SERVIDOR realmente entrega.
+      // Se o servidor recusar (limite diário, álbum completo...), a tela diz a
+      // verdade em vez de fingir uma vitória que não rendeu figurinha.
+      claimGameReward().then(({ sticker, reason }) => {
+        if (sticker) {
+          setGameReward(sticker);
+          setGameState(p => ({ ...p, feedback: 'Excelente! Você reconheceu o talento!' }));
+          return;
+        }
+        const msg =
+          reason === 'DAILY_LIMIT_REACHED'
+            ? `Você acertou! Mas já atingiu o limite de ${MAX_GUESSES_PER_DAY} figurinhas no jogo hoje — volte amanhã.`
+          : reason === 'ALBUM_COMPLETE'
+            ? 'Você acertou! E já tem todas as figurinhas do álbum! 🎉'
+            : 'Você acertou, mas não foi possível registrar a figurinha agora. Tente o próximo cartão.';
+        setGameState(p => ({ ...p, feedback: msg }));
+      });
     } else {
       const rem = gameState.attemptsRemaining - 1;
       setGameState(p => ({ ...p, attemptsRemaining: rem, feedback: rem > 0 ? 'Tente novamente! Analise bem a bio e os atributos.' : `Era ${gameState.target?.name}!` }));
