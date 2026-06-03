@@ -92,21 +92,36 @@ export function useAuth() {
       setSession(nextSession)
       setUser(nextSession.user)
 
-      // Foto do Google (vem em avatar_url ou picture).
-      const avatarUrl = nextSession.user.user_metadata?.avatar_url
-        ?? nextSession.user.user_metadata?.picture
-        ?? null
+      // Foto do Google. Buscamos em DUAS fontes porque alguns usuários têm a
+      // foto apenas em identity_data (auth.identities), e não em user_metadata.
+      //   1) user_metadata.avatar_url / picture
+      //   2) identities[].identity_data.avatar_url / picture  ← mais confiável
+      const meta = nextSession.user.user_metadata ?? {}
+      const fromIdentities = (nextSession.user.identities ?? [])
+        .map(i => {
+          const d = (i.identity_data ?? {}) as Record<string, unknown>
+          return (d.avatar_url ?? d.picture) as string | undefined
+        })
+        .find(Boolean)
+      const avatarUrl: string | null =
+        meta.avatar_url ?? meta.picture ?? fromIdentities ?? null
 
       await fetchProfile(nextSession.user.id)
 
       // Garante que a foto do Google apareça e fique salva. Antes havia uma
       // corrida: o update não era aguardado e o fetchProfile lia o avatar ainda
-      // nulo. Agora corrigimos o estado local na hora e persistimos no banco.
+      // nulo. Agora corrigimos o estado local na hora e persistimos no banco,
+      // aguardando o resultado e logando falhas (antes era fire-and-forget e
+      // erros passavam despercebidos).
       if (avatarUrl) {
         setProfile(prev => (prev && prev.avatar_url !== avatarUrl)
           ? { ...prev, avatar_url: avatarUrl }
           : prev)
-        supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', nextSession.user.id)
+        const { error: avatarErr } = await supabase
+          .from('profiles')
+          .update({ avatar_url: avatarUrl })
+          .eq('id', nextSession.user.id)
+        if (avatarErr) console.error('[useAuth] avatar update failed:', avatarErr.message)
       }
     }
 

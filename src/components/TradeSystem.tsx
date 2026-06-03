@@ -168,6 +168,7 @@ const UserDupCard: React.FC<{
           src={user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`}
           alt={user.name}
           referrerPolicy="no-referrer"
+          onError={(e) => { const t = e.currentTarget; if (!t.dataset.fb) { t.dataset.fb = '1'; t.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`; } }}
           className="w-10 h-10 rounded-full border-2 border-slate-100 bg-slate-50 flex-shrink-0 object-cover"
         />
         <div className="min-w-0">

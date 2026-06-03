@@ -149,6 +149,17 @@ export function useAdmin() {
     return error
   }, [fetchUsers])
 
+  // Override manual da foto do usuário. Útil quando o Google não expõe o avatar
+  // via OAuth (foto restrita no Workspace) e o backfill não consegue recuperar.
+  // RLS "Admins can update any profile" (migration 002) permite a gravação, e o
+  // trigger de avatar_url (migration 009) atualiza o ranking automaticamente.
+  const setUserAvatar = useCallback(async (userId: string, url: string | null) => {
+    const value = url && url.trim().length > 0 ? url.trim() : null
+    const { error } = await supabase.from('profiles').update({ avatar_url: value }).eq('id', userId)
+    if (!error) await fetchUsers()
+    return error
+  }, [fetchUsers])
+
   const resetUserCollection = useCallback(async (userId: string) => {
     const { error } = await supabase.from('user_stickers').delete().eq('user_id', userId)
     if (!error) await fetchUsers()
@@ -239,6 +250,7 @@ export function useAdmin() {
     acknowledgeWinner,
     promoteUser,
     demoteUser,
+    setUserAvatar,
     resetUserCollection,
     approveUser,
     rejectUser,

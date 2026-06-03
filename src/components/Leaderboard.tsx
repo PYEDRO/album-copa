@@ -104,6 +104,7 @@ export default function Leaderboard({ currentUser }: Props) {
                     src={entry.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(entry.name)}`}
                     alt={entry.name}
                     referrerPolicy="no-referrer"
+                    onError={(e) => { const t = e.currentTarget; if (!t.dataset.fb) { t.dataset.fb = '1'; t.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(entry.name)}`; } }}
                     className={`w-8 h-8 rounded-full object-cover border-2 ${
                       isSelf ? 'border-red-600' : 'border-slate-200'
                     }`}
