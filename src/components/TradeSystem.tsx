@@ -320,6 +320,11 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
 
   const handlePropose = async () => {
     if (!toUserId || offered.length === 0 || requested.length === 0) return
+    // Troca precisa ser balanceada (N por N) — impede funilar repetidas (1 por 3)
+    if (offered.length !== requested.length) {
+      alert(`A troca precisa ser equilibrada: você está oferecendo ${offered.length} e pedindo ${requested.length}. Ofereça e peça a mesma quantidade de figurinhas.`)
+      return
+    }
     setProposing(true)
     await tradesHook.proposeTrade(toUserId, offered, requested)
     setShowPropose(false)

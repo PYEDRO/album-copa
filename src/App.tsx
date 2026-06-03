@@ -368,6 +368,8 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState>({ target: null, attemptsRemaining: 1, options: [], feedback: null, won: false, canPlay: true });
   const [gameReward, setGameReward] = useState<DbSticker | null>(null);
   const [gameRewardClaiming, setGameRewardClaiming] = useState(false);
+  // Perguntas restantes hoje (acerto + erro). null = ainda não carregado.
+  const [playsRemaining, setPlaysRemaining] = useState<number | null>(null);
 
   useEffect(() => { localStorage.setItem('game_stats', JSON.stringify(localGameStats)); }, [localGameStats]);
 
@@ -451,16 +453,19 @@ export default function App() {
     const today = new Date().toISOString().split('T')[0];
 
     // Limite AUTORITATIVO no servidor (por USUÁRIO, vale em qualquer aparelho):
-    // conta as figurinhas já ganhas no jogo hoje. Como game_claims é gravado no
-    // banco, trocar de celular/PC NÃO zera o contador — fecha o farm multi-device.
+    // conta TENTATIVAS de hoje (cada resposta, acerto OU erro), não vitórias.
+    // Antes contava game_claims (só acertos), então errar não consumia nada e o
+    // jogo repetia perguntas até acertar 5. Agora são 5 perguntas/dia de fato.
     if (auth.user) {
       const { count, error } = await supabase
-        .from('game_claims')
+        .from('game_plays')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', auth.user.id)
-        .eq('claim_date', today);
-      if (!error && (count ?? 0) >= MAX_GUESSES_PER_DAY) {
-        setGameState(p => ({ ...p, feedback: `Você já ganhou ${MAX_GUESSES_PER_DAY} figurinhas no jogo hoje! Volte amanhã.`, canPlay: false }));
+        .eq('play_date', today);
+      const used = count ?? 0;
+      setPlaysRemaining(Math.max(0, MAX_GUESSES_PER_DAY - used));
+      if (!error && used >= MAX_GUESSES_PER_DAY) {
+        setGameState(p => ({ ...p, feedback: `Você já usou suas ${MAX_GUESSES_PER_DAY} perguntas de hoje! Volte amanhã.`, canPlay: false }));
         setView('game'); return;
       }
     }
@@ -481,41 +486,66 @@ export default function App() {
     setView('game');
   };
 
-  const submitGuess = (guessId: string) => {
+  const submitGuess = async (guessId: string) => {
     if (gameState.won || gameState.attemptsRemaining <= 0) return;
     const today = new Date().toISOString().split('T')[0];
-    if (guessId === gameState.target?.id) {
-      setGameState(p => ({ ...p, won: true, feedback: 'Acertou! Buscando sua figurinha...' }));
-      setLocalGameStats(p => {
-        const isToday = p.lastGuessDate === today;
-        return { ...p, guessesRight: p.guessesRight + 1, guessesTotal: p.guessesTotal + 1, lastGuessDate: today, dailyGuessCount: (isToday ? (p.dailyGuessCount ?? 0) : 0) + 1 };
+    const isCorrect = guessId === gameState.target?.id;
+
+    // Trava de UI imediata contra duplo-clique enquanto o servidor responde.
+    setGameState(p => ({
+      ...p,
+      won: isCorrect,
+      attemptsRemaining: isCorrect ? p.attemptsRemaining : 0,
+      feedback: isCorrect ? 'Acertou! Registrando...' : `Era ${gameState.target?.name}!`,
+    }));
+
+    // ── Consome 1 PERGUNTA no servidor — vale para ACERTO E ERRO ──
+    // É o guardrail autoritativo: trava em MAX_GUESSES_PER_DAY/dia.
+    if (auth.user) {
+      const { data, error } = await supabase.rpc('record_game_play', {
+        p_won: isCorrect,
+        p_sticker_id: gameState.target?.id ?? null,
       });
-      setGameReward(null);
-      // SÓ confirma "ganhou a figurinha" depois que o SERVIDOR realmente entrega.
-      // Se o servidor recusar (limite diário, álbum completo...), a tela diz a
-      // verdade em vez de fingir uma vitória que não rendeu figurinha.
-      claimGameReward().then(({ sticker, reason }) => {
-        if (sticker) {
-          setGameReward(sticker);
-          setGameState(p => ({ ...p, feedback: 'Excelente! Você reconheceu o talento!' }));
-          return;
-        }
-        const msg =
-          reason === 'DAILY_LIMIT_REACHED'
-            ? `Você acertou! Mas já atingiu o limite de ${MAX_GUESSES_PER_DAY} figurinhas no jogo hoje — volte amanhã.`
-          : reason === 'ALBUM_COMPLETE'
-            ? 'Você acertou! E já tem todas as figurinhas do álbum! 🎉'
-            : 'Você acertou, mas não foi possível registrar a figurinha agora. Tente o próximo cartão.';
-        setGameState(p => ({ ...p, feedback: msg }));
-      });
-    } else {
-      const rem = gameState.attemptsRemaining - 1;
-      setGameState(p => ({ ...p, attemptsRemaining: rem, feedback: rem > 0 ? 'Tente novamente! Analise bem a bio e os atributos.' : `Era ${gameState.target?.name}!` }));
-      if (rem === 0) setLocalGameStats(p => {
-        const isToday = p.lastGuessDate === today;
-        return { ...p, guessesTotal: p.guessesTotal + 1, lastGuessDate: today, dailyGuessCount: (isToday ? (p.dailyGuessCount ?? 0) : 0) + 1 };
-      });
+      if (!error && data?.allowed === false) {
+        setGameState(p => ({
+          ...p,
+          canPlay: false,
+          feedback: `Você já usou suas ${MAX_GUESSES_PER_DAY} perguntas de hoje! Volte amanhã.`,
+        }));
+        return;
+      }
+      if (typeof data?.plays_remaining === 'number') setPlaysRemaining(data.plays_remaining);
     }
+
+    setLocalGameStats(p => {
+      const isToday = p.lastGuessDate === today;
+      return {
+        ...p,
+        guessesRight: p.guessesRight + (isCorrect ? 1 : 0),
+        guessesTotal: p.guessesTotal + 1,
+        lastGuessDate: today,
+        dailyGuessCount: (isToday ? (p.dailyGuessCount ?? 0) : 0) + 1,
+      };
+    });
+
+    if (!isCorrect) return; // errou: pergunta já foi consumida, fim do cartão
+
+    setGameReward(null);
+    // SÓ confirma "ganhou a figurinha" depois que o SERVIDOR realmente entrega.
+    claimGameReward().then(({ sticker, reason }) => {
+      if (sticker) {
+        setGameReward(sticker);
+        setGameState(p => ({ ...p, feedback: 'Excelente! Você reconheceu o talento!' }));
+        return;
+      }
+      const msg =
+        reason === 'DAILY_LIMIT_REACHED'
+          ? `Você acertou! Mas já atingiu o limite de ${MAX_GUESSES_PER_DAY} perguntas no jogo hoje — volte amanhã.`
+        : reason === 'ALBUM_COMPLETE'
+          ? 'Você acertou! E já tem todas as figurinhas do álbum! 🎉'
+          : 'Você acertou, mas não foi possível registrar a figurinha agora. Tente o próximo cartão.';
+      setGameState(p => ({ ...p, feedback: msg }));
+    });
   };
 
   if (auth.loading) return (
@@ -677,6 +707,11 @@ export default function App() {
                         <p className="text-xl italic text-slate-600 font-serif leading-relaxed font-light border-l-4 border-red-600 pl-6">"{gameState.target.bio}"</p>
                       </div>
                       <div className="pt-8 space-y-6">
+                        {playsRemaining !== null && (
+                          <p className="text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Perguntas restantes hoje: <span className="text-red-600">{playsRemaining}</span> / {MAX_GUESSES_PER_DAY}
+                          </p>
+                        )}
                         <div className="grid grid-cols-2 gap-4">
                           {gameState.options.map(option => (
                             <button key={option.id} disabled={gameState.won || gameState.attemptsRemaining === 0} onClick={() => submitGuess(option.id)}
