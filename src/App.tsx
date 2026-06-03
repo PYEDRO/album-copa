@@ -289,7 +289,7 @@ const RankingSection = ({ leaderboard, currentUserId, onForceRefresh, refreshing
               <div key={entry.user_id} className={`flex items-center justify-between p-4 rounded-2xl transition-all ${isSelf ? 'bg-red-600 text-white shadow-xl scale-105' : 'bg-white border border-slate-100'}`}>
                 <div className="flex items-center gap-4 md:gap-6">
                   <span className={`text-xl font-black italic w-8 ${isSelf ? 'text-white' : 'text-red-600'}`}>#{i + 1}</span>
-                  <img src={entry.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(entry.name)}`} alt={entry.name} className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-slate-200 bg-slate-50 object-cover" referrerPolicy="no-referrer" />
+                  <img src={entry.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(entry.name)}`} alt={entry.name} className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-slate-200 bg-slate-50 object-cover" referrerPolicy="no-referrer" onError={(e) => { const t = e.currentTarget; if (!t.dataset.fb) { t.dataset.fb = '1'; t.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(entry.name)}`; } }} />
                   <span className={`font-black uppercase tracking-tighter text-sm md:text-base ${isSelf ? 'text-white' : 'text-slate-800'}`}>{entry.name}{isSelf && <span className="ml-2 text-[9px] opacity-70">(você)</span>}</span>
                 </div>
                 <div className="flex flex-col items-end">
@@ -467,9 +467,16 @@ export default function App() {
 
     setGameReward(null);
     const pool = packs.stickers.length > 0 ? packs.stickers.map(toCollaborator) : allCollaborators;
-    const target = pool[Math.floor(Math.random() * pool.length)];
+    // A pergunta (alvo) deve ser uma figurinha que o usuário AINDA NÃO tem no álbum.
+    // Assim o jogo nunca pede para adivinhar uma carta já colecionada.
+    const ownedSet = new Set(packs.ownedIds);
+    const unowned = pool.filter(c => !ownedSet.has(c.id));
+    // Álbum completo (nada a ganhar): cai de volta para o catálogo inteiro p/ manter o jogo jogável.
+    const targetPool = unowned.length > 0 ? unowned : pool;
+    const target = targetPool[Math.floor(Math.random() * targetPool.length)];
+    // Distratores vêm do catálogo inteiro (menos o alvo), garantindo 4 alternativas.
     const opts = [target];
-    while (opts.length < 4) { const o = pool[Math.floor(Math.random() * pool.length)]; if (!opts.find(x => x.id === o.id)) opts.push(o); }
+    while (opts.length < 4 && opts.length < pool.length) { const o = pool[Math.floor(Math.random() * pool.length)]; if (!opts.find(x => x.id === o.id)) opts.push(o); }
     setGameState({ target, attemptsRemaining: 1, options: opts.sort(() => Math.random() - 0.5), feedback: null, won: false, canPlay: true });
     setView('game');
   };

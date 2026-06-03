@@ -47,37 +47,29 @@ export function useAdmin() {
   const fetchMetrics = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const today = new Date().toISOString().split('T')[0]
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
     try {
-      const [
-        { count: totalUsers },
-        { data: activeTodayData },
-        { data: activeWeekData },
-        { count: packsToday },
-        { data: stickerData },
-        { count: uniqueStickers },
-      ] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('daily_claims').select('user_id').eq('claim_date', today),
-        supabase.from('daily_claims').select('user_id').gte('claim_date', weekAgo),
-        supabase.from('pack_logs').select('*', { count: 'exact', head: true }).eq('log_date', today),
-        supabase.from('user_stickers').select('quantity'),
-        supabase.from('stickers').select('*', { count: 'exact', head: true }),
-      ])
+      // Métricas agregadas no banco (SUM/DISTINCT). Evita o limite de 1000 linhas
+      // do PostgREST, que antes capava os totais em ~1000.
+      const { data, error: rpcError } = await supabase.rpc('get_admin_metrics').single()
+      if (rpcError) throw rpcError
 
-      const uniqueActiveToday = new Set((activeTodayData ?? []).map((r: { user_id: string }) => r.user_id)).size
-      const uniqueActiveWeek  = new Set((activeWeekData  ?? []).map((r: { user_id: string }) => r.user_id)).size
-      const totalIssued = (stickerData ?? []).reduce((sum: number, r: { quantity: number }) => sum + (r.quantity ?? 0), 0)
+      const m = data as {
+        total_users: number
+        active_today: number
+        active_last_7_days: number
+        packs_opened_today: number
+        total_stickers_issued: number
+        unique_stickers: number
+      }
 
       setMetrics({
-        totalUsers:          totalUsers       ?? 0,
-        activeToday:         uniqueActiveToday,
-        activeLast7Days:     uniqueActiveWeek,
-        packsOpenedToday:    packsToday       ?? 0,
-        totalStickersIssued: totalIssued,
-        uniqueStickers:      uniqueStickers   ?? 0,
+        totalUsers:          m?.total_users           ?? 0,
+        activeToday:         m?.active_today           ?? 0,
+        activeLast7Days:     m?.active_last_7_days     ?? 0,
+        packsOpenedToday:    m?.packs_opened_today     ?? 0,
+        totalStickersIssued: m?.total_stickers_issued  ?? 0,
+        uniqueStickers:      m?.unique_stickers        ?? 0,
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load metrics')
@@ -153,6 +145,17 @@ export function useAdmin() {
 
   const demoteUser = useCallback(async (userId: string) => {
     const { error } = await supabase.from('profiles').update({ role: 'USER' }).eq('id', userId)
+    if (!error) await fetchUsers()
+    return error
+  }, [fetchUsers])
+
+  // Override manual da foto do usuário. Útil quando o Google não expõe o avatar
+  // via OAuth (foto restrita no Workspace) e o backfill não consegue recuperar.
+  // RLS "Admins can update any profile" (migration 002) permite a gravação, e o
+  // trigger de avatar_url (migration 009) atualiza o ranking automaticamente.
+  const setUserAvatar = useCallback(async (userId: string, url: string | null) => {
+    const value = url && url.trim().length > 0 ? url.trim() : null
+    const { error } = await supabase.from('profiles').update({ avatar_url: value }).eq('id', userId)
     if (!error) await fetchUsers()
     return error
   }, [fetchUsers])
@@ -247,6 +250,7 @@ export function useAdmin() {
     acknowledgeWinner,
     promoteUser,
     demoteUser,
+    setUserAvatar,
     resetUserCollection,
     approveUser,
     rejectUser,

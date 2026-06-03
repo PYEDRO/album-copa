@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import {
   Users, Activity, Package, Star, Shield, UserX,
   RefreshCw, ChevronUp, ChevronDown, Loader2, BarChart3,
-  CheckCircle2, XCircle, Clock, Trophy,
+  CheckCircle2, XCircle, Clock, Trophy, ImageIcon,
 } from 'lucide-react'
 import { useAdmin, type AdminUser } from '../hooks/useAdmin'
 
@@ -51,6 +51,24 @@ export default function AdminDashboard() {
   } | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [approvalLoading, setApprovalLoading] = useState<string | null>(null)
+  // Override manual de avatar
+  const [avatarEdit, setAvatarEdit] = useState<{ userId: string; name: string } | null>(null)
+  const [avatarInput, setAvatarInput] = useState('')
+  const [avatarSaving, setAvatarSaving] = useState(false)
+
+  const openAvatarEditor = (userId: string, name: string, current: string | null) => {
+    setAvatarInput(current ?? '')
+    setAvatarEdit({ userId, name })
+  }
+
+  const saveAvatar = async () => {
+    if (!avatarEdit) return
+    setAvatarSaving(true)
+    const err = await admin.setUserAvatar(avatarEdit.userId, avatarInput)
+    setAvatarSaving(false)
+    if (err) { alert('Erro ao salvar avatar: ' + err.message); return }
+    setAvatarEdit(null)
+  }
 
   const handleSort = (key: keyof AdminUser) => {
     if (sortKey === key) setSortAsc(p => !p)
@@ -223,6 +241,7 @@ export default function AdminDashboard() {
                       src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`}
                       alt={user.name}
                       referrerPolicy="no-referrer"
+                      onError={(e) => { const t = e.currentTarget; if (!t.dataset.fb) { t.dataset.fb = '1'; t.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`; } }}
                       className="w-10 h-10 rounded-full bg-amber-100 border-2 border-amber-200 object-cover"
                     />
                     <div>
@@ -314,6 +333,7 @@ export default function AdminDashboard() {
                         src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`}
                         alt={user.name}
                         referrerPolicy="no-referrer"
+                        onError={(e) => { const t = e.currentTarget; if (!t.dataset.fb) { t.dataset.fb = '1'; t.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.name)}`; } }}
                         className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 object-cover"
                       />
                       <span className="font-bold text-slate-800 truncate max-w-[160px]">{user.name}</span>
@@ -351,6 +371,13 @@ export default function AdminDashboard() {
                           </button>
                         )}
                         <button
+                          onClick={() => openAvatarEditor(user.id, user.name, user.avatar_url)}
+                          title="Editar foto (override manual)"
+                          className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors"
+                        >
+                          <ImageIcon size={15} />
+                        </button>
+                        <button
                           onClick={() => setConfirmAction({ type: 'reset', userId: user.id, name: user.name })}
                           title="Resetar coleção"
                           className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
@@ -366,6 +393,66 @@ export default function AdminDashboard() {
           </table>
         </div>
       </div>
+
+      {/* Avatar Override Modal */}
+      {avatarEdit && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setAvatarEdit(null)} />
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="relative bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-slate-100 z-10 space-y-6"
+          >
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center bg-blue-100">
+                <ImageIcon size={28} className="text-blue-600" />
+              </div>
+              <h4 className="text-xl font-black uppercase italic tracking-tighter text-slate-900">Editar Foto</h4>
+              <p className="text-slate-500 text-sm font-medium">{avatarEdit.name}</p>
+            </div>
+
+            {/* Preview */}
+            <div className="flex justify-center">
+              <img
+                src={avatarInput.trim() || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(avatarEdit.name)}`}
+                alt="preview"
+                referrerPolicy="no-referrer"
+                onError={(e) => { const t = e.currentTarget; if (!t.dataset.fb) { t.dataset.fb = '1'; t.src = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(avatarEdit.name)}`; } }}
+                className="w-20 h-20 rounded-full border-2 border-slate-200 bg-slate-50 object-cover"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">URL da imagem</label>
+              <input
+                value={avatarInput}
+                onChange={e => setAvatarInput(e.target.value)}
+                placeholder="https://..."
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+              <p className="text-[10px] text-slate-400">Cole a URL de uma imagem pública. Deixe em branco para voltar ao avatar gerado.</p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setAvatarEdit(null)}
+                disabled={avatarSaving}
+                className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 font-black uppercase text-xs text-slate-600 transition-all disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveAvatar}
+                disabled={avatarSaving}
+                className="flex-1 py-3 rounded-xl font-black uppercase text-xs text-white bg-blue-600 hover:bg-blue-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {avatarSaving && <Loader2 size={14} className="animate-spin" />}
+                Salvar
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* Confirmation Modal */}
       {confirmAction && (
