@@ -235,6 +235,34 @@ export function useAdmin() {
     return data.publicUrl + '?t=' + Date.now()
   }, [])
 
+  // Upload de foto do usuário — mesmo bucket das figurinhas (sticker-images),
+  // que já tem as políticas de RLS de admin configuradas. Salva em avatars/.
+  const uploadUserAvatar = useCallback(async (file: File, userId: string): Promise<string | null> => {
+    const ext  = file.name.split('.').pop() ?? 'jpg'
+    const path = 'avatars/' + userId + '.' + ext
+
+    const uploadPromise = supabase.storage
+      .from('sticker-images')
+      .upload(path, file, { upsert: true, contentType: file.type })
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(
+        'Timeout de upload (20s). Verifique o bucket "sticker-images" no Supabase Storage e as políticas de RLS de INSERT/UPDATE para admins.'
+      )), 20_000)
+    )
+
+    try {
+      const { error } = await Promise.race([uploadPromise, timeoutPromise])
+      if (error) { console.error('Upload avatar error:', error); return null }
+    } catch (e) {
+      console.error('Upload avatar falhou:', e)
+      return null
+    }
+
+    const { data } = supabase.storage.from('sticker-images').getPublicUrl(path)
+    return data.publicUrl + '?t=' + Date.now()
+  }, [])
+
   const pendingUsers = users.filter(u => u.approved === false)
 
   return {
@@ -251,6 +279,7 @@ export function useAdmin() {
     promoteUser,
     demoteUser,
     setUserAvatar,
+    uploadUserAvatar,
     resetUserCollection,
     approveUser,
     rejectUser,
