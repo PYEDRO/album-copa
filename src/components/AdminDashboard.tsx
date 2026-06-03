@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Users, Activity, Package, Star, Shield, UserX,
@@ -55,10 +55,26 @@ export default function AdminDashboard() {
   const [avatarEdit, setAvatarEdit] = useState<{ userId: string; name: string } | null>(null)
   const [avatarInput, setAvatarInput] = useState('')
   const [avatarSaving, setAvatarSaving] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const avatarFileRef = useRef<HTMLInputElement>(null)
 
   const openAvatarEditor = (userId: string, name: string, current: string | null) => {
     setAvatarInput(current ?? '')
     setAvatarEdit({ userId, name })
+  }
+
+  // Upload de arquivo do computador → Storage → grava no perfil (igual cartinhas)
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // permite reenviar o mesmo arquivo
+    if (!file || !avatarEdit) return
+    setAvatarUploading(true)
+    const url = await admin.uploadUserAvatar(file, avatarEdit.userId)
+    if (!url) { setAvatarUploading(false); alert('Falha no upload da imagem.'); return }
+    setAvatarInput(url) // mostra no preview
+    const err = await admin.setUserAvatar(avatarEdit.userId, url) // já persiste
+    setAvatarUploading(false)
+    if (err) { alert('Erro ao salvar avatar: ' + err.message); return }
   }
 
   const saveAvatar = async () => {
@@ -422,15 +438,27 @@ export default function AdminDashboard() {
               />
             </div>
 
+            {/* Upload de arquivo (igual às figurinhas) */}
+            <input ref={avatarFileRef} type="file" accept="image/*" onChange={handleAvatarFile} className="hidden" />
+            <button
+              type="button"
+              onClick={() => avatarFileRef.current?.click()}
+              disabled={avatarUploading || avatarSaving}
+              className="w-full py-3 border-2 border-dashed border-blue-300 hover:border-blue-500 rounded-xl text-xs font-black uppercase text-blue-500 hover:text-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {avatarUploading ? <Loader2 size={15} className="animate-spin" /> : <ImageIcon size={15} />}
+              {avatarUploading ? 'Enviando...' : 'Enviar foto do computador'}
+            </button>
+
             <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">URL da imagem</label>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">ou cole uma URL</label>
               <input
                 value={avatarInput}
                 onChange={e => setAvatarInput(e.target.value)}
                 placeholder="https://..."
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
               />
-              <p className="text-[10px] text-slate-400">Cole a URL de uma imagem pública. Deixe em branco para voltar ao avatar gerado.</p>
+              <p className="text-[10px] text-slate-400">Envie um arquivo ou cole a URL. Deixe em branco e salve para voltar ao avatar gerado.</p>
             </div>
 
             <div className="flex gap-3">
