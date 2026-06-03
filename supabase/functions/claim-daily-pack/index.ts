@@ -26,7 +26,13 @@ const SCORE_MAP: Record<string, number> = {
 }
 
 const STICKERS_PER_PACK = 3
-const MAX_DUPLICATES_PER_PACK = 1
+// Teto de cartas repetidas por pack. = STICKERS_PER_PACK significa SEM teto:
+// um pack pode vir com várias (ou todas) repetidas. Antes era 1.
+const MAX_DUPLICATES_PER_PACK = STICKERS_PER_PACK
+// Preferência por cartas novas no sorteio. Quanto menor, mais repetidas saem.
+// Antes era 5 (forte). 2 = leve preferência por novas, repetidas saem bem mais.
+const NEW_CARD_WEIGHT = 2
+const OWNED_CARD_WEIGHT = 1
 
 interface Sticker {
   id: string
@@ -233,19 +239,26 @@ function generateSticker(
   pickedInThisPack: Set<string>,
   mustBeNew: boolean,
 ): Sticker {
+  // Pesos base de raridade:
+  //   common    ~72%  — entregue com frequência normal
+  //   rare      ~21%  — incomum (~1 em 5 figurinhas)
+  //   epic       ~5%  — raro   (~1 em 20 figurinhas)
+  //   legendary  ~2%  — lendário (~1 em 50 figurinhas)
   const BASE_WEIGHTS: Record<string, number> = {
-    common: 70,
-    rare: 20,
-    epic: 9,
-    legendary: 1,
+    common: 72,
+    rare: 21,
+    epic: 5,
+    legendary: 2,
   }
 
-  // boostFactor = min(1 + pityCounter * 0.1, 3)
-  const boostFactor = Math.min(1 + pityCounter * 0.1, 3)
+  // Pity system: aplica boost APENAS em epic e legendary.
+  // Rare não é afetado — assim não infla demais a chance de cartas raras.
+  // boostFactor = min(1 + pityCounter * 0.1, 2)  → máx 2× (atingido em 10 packs sem epic/lendário)
+  const boostFactor = Math.min(1 + pityCounter * 0.1, 2)
 
   const weights: Record<string, number> = {
     common: BASE_WEIGHTS.common,
-    rare: BASE_WEIGHTS.rare * boostFactor,
+    rare: BASE_WEIGHTS.rare,
     epic: BASE_WEIGHTS.epic * boostFactor,
     legendary: BASE_WEIGHTS.legendary * boostFactor,
   }
@@ -286,10 +299,10 @@ function generateSticker(
     // Se não há cartas novas disponíveis (álbum quase completo), usa pool sem filtro
   }
 
-  // Pesos: preferência forte por cartas novas quando não é mustBeNew
+  // Pesos: leve preferência por cartas novas (configurável no topo do arquivo).
   const poolWeights = candidates.map((s) => {
     const owned = albumOwnedMap.get(s.id) ?? 0
-    return owned === 0 ? 5 : 1
+    return owned === 0 ? NEW_CARD_WEIGHT : OWNED_CARD_WEIGHT
   })
 
   const totalPoolWeight = poolWeights.reduce((a, b) => a + b, 0)

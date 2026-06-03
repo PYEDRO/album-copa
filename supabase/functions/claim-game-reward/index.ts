@@ -61,26 +61,30 @@ Deno.serve(async (req: Request) => {
       return errorResponse(500, 'Sticker catalog unavailable')
     }
 
-    // ── Busca figurinhas já possuídas ─────────────────────────
-    const { data: owned } = await supabaseAdmin
-      .from('user_stickers')
-      .select('sticker_id')
-      .eq('user_id', user.id)
-
-    const ownedIds = new Set((owned ?? []).map((s: { sticker_id: string }) => s.sticker_id))
-
-    // ── Filtra cartas não possuídas ───────────────────────────
-    const unowned = (allStickers as Sticker[]).filter((s) => !ownedIds.has(s.id))
-
-    if (unowned.length === 0) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'ALBUM_COMPLETE' }),
-        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+    // ── Escolhe figurinha do CATÁLOGO COMPLETO, ponderada por raridade ──
+    // O jogo agora pode premiar figurinhas que o usuário JÁ tem (repetidas),
+    // não só as inéditas. Mantém a distribuição de raridade (não vira atalho
+    // para cartas raras). Se vier repetida, a RPC claim_game_reward incrementa
+    // a quantidade (ON CONFLICT) — por isso não há mais "álbum completo".
+    const GAME_REWARD_WEIGHTS: Record<string, number> = {
+      common: 72,
+      rare: 21,
+      epic: 5,
+      legendary: 2,
     }
 
-    // ── Escolhe figurinha aleatória dentre as não possuídas ───
-    const sticker = unowned[Math.floor(Math.random() * unowned.length)]
+    const pool = allStickers as Sticker[]
+    const poolWeights = pool.map((s) => GAME_REWARD_WEIGHTS[s.rarity] ?? 72)
+    const totalPoolWeight = poolWeights.reduce((a, b) => a + b, 0)
+    let roll = Math.random() * totalPoolWeight
+    let sticker = pool[pool.length - 1]
+    for (let i = 0; i < pool.length; i++) {
+      roll -= poolWeights[i]
+      if (roll <= 0) {
+        sticker = pool[i]
+        break
+      }
+    }
 
     // ── Persiste via RPC atômico ──────────────────────────────
     const { data: result, error: rpcError } = await supabaseAdmin.rpc('claim_game_reward', {
