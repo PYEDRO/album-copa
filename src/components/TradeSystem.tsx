@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { ArrowLeftRight, Check, X, Loader2, ChevronRight, Plus, Copy, CheckCheck, Users, UserCheck, UserX, AlertCircle } from 'lucide-react'
 import { useTrades } from '../hooks/useTrades'
@@ -10,6 +10,9 @@ interface Props {
   userStickers: Map<string, number>
   allStickers: DbSticker[]
   tradesHook: ReturnType<typeof useTrades>
+  /** Chamado após uma troca ser aceita com sucesso, para recarregar o
+   *  inventário do usuário (a carta recebida some/aparece na hora) e o ranking. */
+  onInventoryRefresh?: () => void
 }
 
 const RARITY_COLORS: Record<string, string> = {
@@ -122,6 +125,13 @@ const TradeCard: React.FC<TradeCardProps> = ({
         </div>
       </div>
 
+      {trade.status === 'cancelled' && trade.cancel_reason && (
+        <div className="flex items-start gap-2 text-[11px] font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-slate-400" />
+          <span>{trade.cancel_reason}</span>
+        </div>
+      )}
+
       {isPending && (
         <div className="flex gap-2 pt-1">
           {isReceiver && (
@@ -205,8 +215,16 @@ const UserDupCard: React.FC<{
 // ── Componente principal ──────────────────────────────────────
 const USERS_PER_PAGE = 3
 
-export default function TradeSystem({ userId, userStickers, allStickers, tradesHook }: Props) {
+export default function TradeSystem({ userId, userStickers, allStickers, tradesHook, onInventoryRefresh }: Props) {
   const { trades, acting, error, acceptTrade, updateTradeStatus } = tradesHook
+
+  // Aceita a troca e, se concluída, recarrega o inventário do usuário. Sem isso,
+  // a carta recebida não aparecia (e a entregue continuava aparecendo) até dar
+  // reload — fazia parecer que a troca "não trouxe" a figurinha oferecida.
+  const handleAccept = useCallback(async (tradeId: string) => {
+    const ok = await acceptTrade(tradeId)
+    if (ok) onInventoryRefresh?.()
+  }, [acceptTrade, onInventoryRefresh])
 
   const [showPropose, setShowPropose] = useState(false)
   const [toUserId, setToUserId]       = useState('')
@@ -230,36 +248,43 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
   const [userPage, setUserPage]           = useState(0)
 
   // Busca usuários com figurinhas repetidas via RPC (SECURITY DEFINER — bypassa RLS)
-  useEffect(() => {
-    const fetchUsersWithDups = async () => {
-      setLoadingUsers(true)
-      try {
-        const { data, error } = await supabase.rpc('get_users_with_duplicates', {
-          p_current_user_id: userId,
-        })
+  // Extraído em useCallback para poder recarregar sob demanda (ex.: ao abrir o
+  // modal de proposta), evitando trabalhar com uma lista desatualizada.
+  const fetchUsersWithDups = useCallback(async () => {
+    setLoadingUsers(true)
+    try {
+      const { data, error } = await supabase.rpc('get_users_with_duplicates', {
+        p_current_user_id: userId,
+      })
 
-        if (error) {
-          console.error('get_users_with_duplicates error:', error)
-          return
-        }
-
-        if (data) {
-          setUsersWithDups(
-            (data as any[]).map(row => ({
-              id:             row.user_id,
-              name:           row.user_name ?? 'Jogador',
-              avatarUrl:      row.user_avatar ?? null,
-              duplicateCount: Number(row.duplicate_count),
-              stickerIds:     row.sticker_ids ?? [],
-            })),
-          )
-        }
-      } finally {
-        setLoadingUsers(false)
+      if (error) {
+        console.error('get_users_with_duplicates error:', error)
+        return
       }
+
+      if (data) {
+        setUsersWithDups(
+          (data as any[]).map(row => ({
+            id:             row.user_id,
+            name:           row.user_name ?? 'Jogador',
+            avatarUrl:      row.user_avatar ?? null,
+            duplicateCount: Number(row.duplicate_count),
+            stickerIds:     row.sticker_ids ?? [],
+          })),
+        )
+      }
+    } finally {
+      setLoadingUsers(false)
     }
-    fetchUsersWithDups()
   }, [userId])
+
+  useEffect(() => { fetchUsersWithDups() }, [fetchUsersWithDups])
+
+  // Ao abrir o modal de proposta, recarrega as repetidas para evitar propor
+  // com base em dados antigos (a repetida pode já ter sido trocada).
+  useEffect(() => {
+    if (showPropose) fetchUsersWithDups()
+  }, [showPropose, fetchUsersWithDups])
 
   // Lookup debounced: quando o UUID muda, busca nome + repetidas do destinatário
   useEffect(() => {
@@ -315,14 +340,16 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
   // Apenas figurinhas com duplicatas (qty >= 2) podem ser oferecidas em trocas
   const myStickers = allStickers.filter(s => (userStickers.get(s.id) ?? 0) > 1)
 
+  // Seleção ÚNICA: a troca é 1 carta por 1 carta, então marcar uma nova
+  // substitui a anterior (clicar de novo desmarca).
   const toggleSticker = (id: string, list: string[], setter: (v: string[]) => void) =>
-    setter(list.includes(id) ? list.filter(x => x !== id) : [...list, id])
+    setter(list.includes(id) ? [] : [id])
 
   const handlePropose = async () => {
-    if (!toUserId || offered.length === 0 || requested.length === 0) return
-    // Troca precisa ser balanceada (N por N) — impede funilar repetidas (1 por 3)
-    if (offered.length !== requested.length) {
-      alert(`A troca precisa ser equilibrada: você está oferecendo ${offered.length} e pedindo ${requested.length}. Ofereça e peça a mesma quantidade de figurinhas.`)
+    if (!toUserId) return
+    // Troca é estritamente 1 carta por 1 carta.
+    if (offered.length !== 1 || requested.length !== 1) {
+      alert('A troca é de 1 carta por 1 carta: selecione exatamente uma figurinha para oferecer e uma para pedir.')
       return
     }
     setProposing(true)
@@ -413,7 +440,7 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
           </h3>
           {pendingReceived.map(t => (
             <TradeCard key={t.id} trade={t} userId={userId} allStickers={allStickers}
-              onAccept={() => acceptTrade(t.id)}
+              onAccept={() => handleAccept(t.id)}
               onReject={() => updateTradeStatus(t.id, 'rejected')}
               onCancel={() => {}} acting={acting} />
           ))}
@@ -602,7 +629,7 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
                 {/* ── Você oferece ── */}
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                    Você oferece <span className="normal-case text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold ml-1">só repetidas</span>
+                    Você oferece <span className="normal-case text-[9px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold ml-1">1 carta · só repetidas</span>
                   </label>
                   {myStickers.length === 0 ? (
                     <p className="text-[11px] text-slate-400 italic p-3 bg-slate-50 rounded-xl border border-slate-100">Você não tem figurinhas repetidas para oferecer.</p>
@@ -627,7 +654,7 @@ export default function TradeSystem({ userId, userStickers, allStickers, tradesH
                 {/* ── Você quer ── */}
                 <div>
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">
-                    Você quer
+                    Você quer <span className="normal-case text-[9px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold ml-1">1 carta</span>
                     {targetUser.found === true && targetUser.ids.length > 0 && (
                       <span className="ml-2 normal-case text-[9px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">
                         só repetidas de {targetUser.name}

@@ -45,12 +45,29 @@ Deno.serve(async (req: Request) => {
 
     if (error) {
       const msg = error.message ?? ''
-      if (msg.includes('TRADE_NOT_FOUND'))    return errorResponse(404, 'Trade not found')
-      if (msg.includes('TRADE_NOT_PENDING'))  return errorResponse(409, 'Trade is no longer pending')
-      if (msg.includes('TRADE_UNAUTHORIZED')) return errorResponse(403, 'Not authorized to accept this trade')
-      if (msg.includes('MISSING_STICKER'))    return errorResponse(422, `Sticker not owned: ${msg.split(':')[1]}`)
+      if (msg.includes('TRADE_NOT_FOUND'))    return errorResponse(404, 'Troca não encontrada.')
+      if (msg.includes('TRADE_NOT_PENDING'))  return errorResponse(409, 'Esta troca não está mais pendente — pode já ter sido aceita, recusada ou cancelada.')
+      if (msg.includes('TRADE_UNAUTHORIZED')) return errorResponse(403, 'Você não tem permissão para aceitar esta troca.')
+      if (msg.includes('TRADE_NOT_ONE_FOR_ONE') || msg.includes('TRADE_MUST_BE_ONE_FOR_ONE'))
+        return errorResponse(422, 'A troca precisa ser de 1 figurinha por 1 figurinha.')
+      // Quem aceita é o destinatário (to_user). OFFERER = quem propôs; ACCEPTOR = você.
+      if (msg.includes('OFFERER_MISSING_STICKER'))
+        return errorResponse(422, 'Esta troca não é mais válida: quem propôs não tem mais essa figurinha repetida para oferecer.')
+      if (msg.includes('ACCEPTOR_MISSING_STICKER'))
+        return errorResponse(422, 'Você não tem mais a figurinha pedida repetida (qty ≥ 2) para concluir esta troca.')
       console.error('execute_trade error:', error)
       return errorResponse(500, 'Trade execution failed')
+    }
+
+    // Desde a migration 035, execute_trade NÃO lança erro para "trocas fantasma":
+    // ele CANCELA a troca e devolve success:false. Aqui traduzimos para uma
+    // mensagem clara — a troca já saiu dos pendentes (realtime atualiza o front).
+    if (data?.success === false) {
+      if (data.error === 'OFFERER_MISSING_STICKER')
+        return errorResponse(422, 'Esta troca não é mais válida: quem propôs não tem mais essa figurinha repetida. A troca foi cancelada.')
+      if (data.error === 'ACCEPTOR_MISSING_STICKER')
+        return errorResponse(422, 'Você não tem mais a figurinha pedida repetida (qty ≥ 2). A troca foi cancelada.')
+      return errorResponse(422, 'Esta troca não pôde ser concluída e foi cancelada.')
     }
 
     // Refresh leaderboard async (best-effort)

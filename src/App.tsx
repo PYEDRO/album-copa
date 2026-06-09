@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Book, Gamepad2, Package, Search, Trophy, ChevronRight, ChevronLeft,
@@ -370,6 +370,10 @@ export default function App() {
   const [gameRewardClaiming, setGameRewardClaiming] = useState(false);
   // Perguntas restantes hoje (acerto + erro). null = ainda não carregado.
   const [playsRemaining, setPlaysRemaining] = useState<number | null>(null);
+  // Trava contra duplo-clique: o `disabled` do botão só vale após re-render,
+  // então cliques rápidos em 2 opções disparavam submitGuess 2x e consumiam
+  // 2 tentativas do dia numa única carta. Esta ref barra na hora (síncrono).
+  const guessLockRef = useRef(false);
 
   useEffect(() => { localStorage.setItem('game_stats', JSON.stringify(localGameStats)); }, [localGameStats]);
 
@@ -445,6 +449,7 @@ export default function App() {
   }, [auth.user, packs]);
 
   const startNewGame = async () => {
+    guessLockRef.current = false; // libera a trava para a próxima carta
     if (!isWindowOpen) {
       setGameState({ target: null, attemptsRemaining: 1, options: [], feedback: `O jogo fica disponível das 12:00 às 23:59 (horário de Fortaleza).`, won: false, canPlay: false });
       setView('game');
@@ -488,6 +493,10 @@ export default function App() {
 
   const submitGuess = async (guessId: string) => {
     if (gameState.won || gameState.attemptsRemaining <= 0) return;
+    // Barra duplo-clique de forma síncrona (antes de qualquer await/re-render):
+    // garante NO MÁXIMO 1 tentativa registrada por carta.
+    if (guessLockRef.current) return;
+    guessLockRef.current = true;
     const today = new Date().toISOString().split('T')[0];
     const isCorrect = guessId === gameState.target?.id;
 
@@ -665,7 +674,8 @@ export default function App() {
 
           {view === 'trading' && auth.user && (
             <motion.div key="trading" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-              <TradeSystem userId={auth.user.id} userStickers={packs.userStickers} allStickers={packs.stickers} tradesHook={tradesHook} />
+              <TradeSystem userId={auth.user.id} userStickers={packs.userStickers} allStickers={packs.stickers} tradesHook={tradesHook}
+                onInventoryRefresh={() => { packs.refetchInventory(); refetchLeaderboard(); }} />
             </motion.div>
           )}
 

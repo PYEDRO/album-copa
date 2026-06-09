@@ -45,7 +45,19 @@ export function useTrades(userId: string | undefined) {
       offered_sticker_ids: offeredStickerIds,
       requested_sticker_ids: requestedStickerIds,
     })
-    if (error) setError(error.message)
+    if (error) {
+      // Traduz os códigos dos triggers (027/036) para mensagens claras.
+      const m = error.message ?? ''
+      const friendly =
+        m.includes('DUPLICATE_PENDING_TRADE')
+          ? 'Você já tem uma proposta igual pendente para este jogador.'
+        : m.includes('TRADE_SAME_STICKER')
+          ? 'Não dá para trocar uma figurinha por ela mesma.'
+        : m.includes('TRADE_MUST_BE_ONE_FOR_ONE') || m.includes('TRADE_NOT_ONE_FOR_ONE')
+          ? 'A troca precisa ser de 1 figurinha por 1 figurinha.'
+        : m
+      setError(friendly)
+    }
     else await fetchTrades()
     setActing(false)
     return !error
