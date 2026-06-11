@@ -1,8 +1,11 @@
 /**
  * Edge Function: claim-game-reward
- * Concede 1 figurinha não possuída ao jogador que acertou no jogo.
+ * Concede 1 figurinha NÃO POSSUÍDA ao jogador que acertou no jogo.
  * Uma recompensa por vitória (sem limite diário).
- * A figurinha é sempre nova (não possuída no álbum).
+ * A figurinha é SEMPRE nova (não possuída no álbum do jogador).
+ *
+ * Estratégia: Backend filtra cartas já possuídas ANTES de sortear.
+ * Resultado: nunca sorteará repetida, álbum é sempre coletável.
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -61,19 +64,50 @@ Deno.serve(async (req: Request) => {
       return errorResponse(500, 'Sticker catalog unavailable')
     }
 
-    // ── Escolhe figurinha do CATÁLOGO COMPLETO, ponderada por raridade ──
-    // O jogo agora pode premiar figurinhas que o usuário JÁ tem (repetidas),
-    // não só as inéditas. Mantém a distribuição de raridade (não vira atalho
-    // para cartas raras). Se vier repetida, a RPC claim_game_reward incrementa
-    // a quantidade (ON CONFLICT) — por isso não há mais "álbum completo".
+    // ── NOVO: Busca cartas que o usuário JÁ POSSUI ──────────────
+    const { data: ownedStickers, error: ownedError } = await supabaseAdmin
+      .from('user_stickers')
+      .select('sticker_id')
+      .eq('user_id', user.id)
+
+    if (ownedError) {
+      console.error('Error fetching owned stickers:', ownedError)
+      return errorResponse(500, 'Inventory check failed')
+    }
+
+    const ownedIds = new Set((ownedStickers || []).map((o: any) => o.sticker_id))
+
+    // ── NOVO: Filtra pool para SÓ cartas NÃO POSSUÍDAS ──────────
+    const availablePool = (allStickers as Sticker[]).filter((s) => !ownedIds.has(s.id))
+
+    // ── Trata caso: álbum completo (nenhuma carta disponível) ────
+    if (availablePool.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'ALBUM_COMPLETE',
+          message: 'Parabéns! Você completou o álbum!',
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // ── Escolhe figurinha do pool FILTRADO, ponderada por raridade ──
+    // ATUALIZADO (2026-06-11): Aumentado 10x as chances de ÉPICO e LENDÁRIO
+    // Novo balanço:
+    //   common:    72 (44.2%) - mantém base
+    //   rare:      21 (12.9%) - mantém base
+    //   epic:      50 (30.7%) - 10x mais (era 5%)
+    //   legendary: 20 (12.3%) - 10x mais (era 2%)
+    // Total peso: 163 (antes era 100)
     const GAME_REWARD_WEIGHTS: Record<string, number> = {
       common: 72,
       rare: 21,
-      epic: 5,
-      legendary: 2,
+      epic: 50,      // ← AUMENTADO DE 5 PARA 50 (10x)
+      legendary: 20, // ← AUMENTADO DE 2 PARA 20 (10x)
     }
 
-    const pool = allStickers as Sticker[]
+    const pool = availablePool
     const poolWeights = pool.map((s) => GAME_REWARD_WEIGHTS[s.rarity] ?? 72)
     const totalPoolWeight = poolWeights.reduce((a, b) => a + b, 0)
     let roll = Math.random() * totalPoolWeight
