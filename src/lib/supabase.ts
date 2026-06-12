@@ -49,6 +49,7 @@ export type DbTrade = {
   status: 'pending' | 'accepted' | 'rejected' | 'cancelled'
   created_at: string
   completed_at: string | null
+  cancel_reason: string | null
 }
 
 export type DbLeaderboardEntry = {

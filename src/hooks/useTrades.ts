@@ -97,20 +97,37 @@ export function useTrades(userId: string | undefined) {
     }
   }, [fetchTrades])
 
-  // Reject or cancel
+  // Reject (destinatário) ou cancel (proponente).
+  // Via RPC respond_to_trade (SECURITY DEFINER, atômica): o UPDATE direto na
+  // tabela era barrado pela RLS quando o DESTINATÁRIO recusava — casava 0 linhas
+  // SEM erro, então a recusa "sumia" e a troca seguia pendente (fantasma).
   const updateTradeStatus = useCallback(async (
     tradeId: string,
     status: 'rejected' | 'cancelled',
   ) => {
     setActing(true)
-    const { error } = await supabase
-      .from('trades')
-      .update({ status })
-      .eq('id', tradeId)
-    if (error) setError(error.message)
-    else await fetchTrades()
+    setError(null)
+    const { data, error } = await supabase.rpc('respond_to_trade', {
+      p_trade_id: tradeId,
+      p_action: status,
+    })
+    const ok = !error && data?.success === true
+    if (error) {
+      setError(error.message)
+    } else if (data?.success === false && data?.error !== 'TRADE_NOT_PENDING') {
+      // TRADE_NOT_PENDING não é erro real: a troca já saiu de pendente
+      // (ex.: foi aceita/cancelada em paralelo). Só atualizamos a lista.
+      setError(
+        data?.error === 'TRADE_UNAUTHORIZED'
+          ? 'Você não tem permissão para esta ação.'
+        : data?.error === 'TRADE_NOT_FOUND'
+          ? 'Troca não encontrada.'
+        : 'Não foi possível atualizar a troca.',
+      )
+    }
+    await fetchTrades()
     setActing(false)
-    return !error
+    return ok
   }, [fetchTrades])
 
   const pendingReceived = trades.filter(t => t.to_user_id === userId && t.status === 'pending')
