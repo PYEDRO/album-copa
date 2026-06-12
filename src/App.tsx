@@ -513,11 +513,15 @@ export default function App() {
       feedback: isCorrect ? 'Acertou! Registrando...' : `Era ${gameState.target?.name}!`,
     }));
 
-    // ── Consome 1 PERGUNTA no servidor — vale para ACERTO E ERRO ──
-    // É o guardrail autoritativo: trava em MAX_GUESSES_PER_DAY/dia.
-    if (auth.user) {
+    // ── Helper: consome 1 PERGUNTA no servidor (guardrail MAX_GUESSES_PER_DAY/dia)
+    //    e atualiza os contadores locais. Chamado SÓ quando o desfecho do cartão
+    //    está RESOLVIDO (erro respondido, prêmio entregue, ou desfecho legítimo
+    //    sem prêmio) — nunca numa falha transitória, p/ não gastar a tentativa
+    //    do jogador à toa.
+    const consumePlay = async (won: boolean) => {
+      if (!auth.user) return;
       const { data, error } = await supabase.rpc('record_game_play', {
-        p_won: isCorrect,
+        p_won: won,
         p_sticker_id: gameState.target?.id ?? null,
       });
       if (!error && data?.allowed === false) {
@@ -529,37 +533,62 @@ export default function App() {
         return;
       }
       if (typeof data?.plays_remaining === 'number') setPlaysRemaining(data.plays_remaining);
+      setLocalGameStats(p => {
+        const isToday = p.lastGuessDate === today;
+        return {
+          ...p,
+          guessesRight: p.guessesRight + (won ? 1 : 0),
+          guessesTotal: p.guessesTotal + 1,
+          lastGuessDate: today,
+          dailyGuessCount: (isToday ? (p.dailyGuessCount ?? 0) : 0) + 1,
+        };
+      });
+    };
+
+    // ── ERRO: a tentativa é consumida na hora; fim do cartão ──
+    if (!isCorrect) {
+      await consumePlay(false);
+      return;
     }
 
-    setLocalGameStats(p => {
-      const isToday = p.lastGuessDate === today;
-      return {
-        ...p,
-        guessesRight: p.guessesRight + (isCorrect ? 1 : 0),
-        guessesTotal: p.guessesTotal + 1,
-        lastGuessDate: today,
-        dailyGuessCount: (isToday ? (p.dailyGuessCount ?? 0) : 0) + 1,
-      };
-    });
-
-    if (!isCorrect) return; // errou: pergunta já foi consumida, fim do cartão
-
+    // ── ACERTO: resgata a figurinha PRIMEIRO; só consome a tentativa quando o
+    //    resultado está RESOLVIDO. Antes a tentativa era gasta ANTES do resgate:
+    //    se o resgate falhasse (rede/servidor — justamente as instabilidades do
+    //    banco), o jogador ficava SEM carta E SEM a tentativa ("joguei e não
+    //    recebi"). Agora, em falha transitória, a pergunta NÃO é gasta e ele
+    //    pode tentar de novo. O teto de recompensas (game_claims, 5/dia, em
+    //    claim_game_reward) continua sendo o limite real de prêmios, então não
+    //    gastar a tentativa numa falha NÃO permite ganhar além do teto.
     setGameReward(null);
-    // SÓ confirma "ganhou a figurinha" depois que o SERVIDOR realmente entrega.
-    claimGameReward().then(({ sticker, reason }) => {
-      if (sticker) {
-        setGameReward(sticker);
-        setGameState(p => ({ ...p, feedback: 'Excelente! Você reconheceu o talento!' }));
-        return;
-      }
-      const msg =
-        reason === 'DAILY_LIMIT_REACHED'
-          ? `Você acertou! Mas já atingiu o limite de ${MAX_GUESSES_PER_DAY} perguntas no jogo hoje — volte amanhã.`
-        : reason === 'ALBUM_COMPLETE'
-          ? 'Você acertou! E já tem todas as figurinhas do álbum! 🎉'
-          : 'Você acertou, mas não foi possível registrar a figurinha agora. Tente o próximo cartão.';
-      setGameState(p => ({ ...p, feedback: msg }));
-    });
+    const { sticker, reason } = await claimGameReward();
+
+    if (sticker) {
+      await consumePlay(true);
+      setGameReward(sticker);
+      setGameState(p => ({ ...p, feedback: 'Excelente! Você reconheceu o talento!' }));
+      return;
+    }
+
+    if (reason === 'ALBUM_COMPLETE' || reason === 'DAILY_LIMIT_REACHED') {
+      // Desfecho LEGÍTIMO sem carta nova → consome a tentativa.
+      await consumePlay(true);
+      setGameState(p => ({
+        ...p,
+        feedback: reason === 'DAILY_LIMIT_REACHED'
+          ? `Você acertou! Mas já atingiu o limite de ${MAX_GUESSES_PER_DAY} recompensas no jogo hoje — volte amanhã.`
+          : 'Você acertou! E já tem todas as figurinhas do álbum! 🎉',
+      }));
+      return;
+    }
+
+    // ── Falha TRANSITÓRIA (rede/servidor): NÃO consome a tentativa ──
+    // Libera a trava e devolve o cartão ao estado jogável p/ nova tentativa.
+    guessLockRef.current = false;
+    setGameState(p => ({
+      ...p,
+      won: false,
+      feedback: 'Falha temporária ao registrar a figurinha. Sua pergunta NÃO foi gasta — responda novamente.',
+    }));
   };
 
   if (auth.loading) return (
