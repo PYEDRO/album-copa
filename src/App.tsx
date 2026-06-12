@@ -374,6 +374,10 @@ export default function App() {
   // então cliques rápidos em 2 opções disparavam submitGuess 2x e consumiam
   // 2 tentativas do dia numa única carta. Esta ref barra na hora (síncrono).
   const guessLockRef = useRef(false);
+  // Token de idempotência POR CARTÃO. Gerado em startNewGame e reusado em
+  // retries da MESMA jogada — garante que play_game_round nunca conceda 2x
+  // (resposta perdida na rede / duplo-clique / nova tentativa após falha).
+  const gameTokenRef = useRef<string>('');
 
   useEffect(() => { localStorage.setItem('game_stats', JSON.stringify(localGameStats)); }, [localGameStats]);
 
@@ -420,33 +424,10 @@ export default function App() {
     refetchLeaderboard();
   };
 
-  const claimGameReward = useCallback(async (): Promise<{ sticker: DbSticker | null; reason: string | null }> => {
-    if (!auth.user) return { sticker: null, reason: 'NO_USER' };
-    setGameRewardClaiming(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return { sticker: null, reason: 'NO_SESSION' };
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const res = await fetch(`${supabaseUrl}/functions/v1/claim-game-reward`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      const json = await res.json();
-      if (res.ok && json.success && json.sticker) {
-        await packs.refetchInventory();
-        return { sticker: json.sticker as DbSticker, reason: null };
-      }
-      // Servidor recusou (limite diário, álbum completo, etc.) — devolve o motivo
-      return { sticker: null, reason: json?.error ?? 'UNKNOWN' };
-    } catch {
-      return { sticker: null, reason: 'NETWORK' };
-    } finally {
-      setGameRewardClaiming(false);
-    }
-  }, [auth.user, packs]);
+  // Recompensa do jogo agora é entregue pela RPC atômica play_game_round
+  // (migration 042), chamada em submitGuess. A antiga edge function
+  // claim-game-reward continua existindo no servidor como rede de segurança,
+  // mas não é mais chamada pelo front (era um ponto de falha HTTP separado).
 
   const startNewGame = async () => {
     guessLockRef.current = false; // libera a trava para a próxima carta
@@ -492,6 +473,8 @@ export default function App() {
     // Distratores vêm do catálogo inteiro (menos o alvo), garantindo 4 alternativas.
     const opts = [target];
     while (opts.length < 4 && opts.length < pool.length) { const o = pool[Math.floor(Math.random() * pool.length)]; if (!opts.find(x => x.id === o.id)) opts.push(o); }
+    // Novo token de idempotência para ESTE cartão (reusado em eventuais retries).
+    gameTokenRef.current = (crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
     setGameState({ target, attemptsRemaining: 1, options: opts.sort(() => Math.random() - 0.5), feedback: null, won: false, canPlay: true });
     setView('game');
   };
@@ -513,82 +496,74 @@ export default function App() {
       feedback: isCorrect ? 'Acertou! Registrando...' : `Era ${gameState.target?.name}!`,
     }));
 
-    // ── Helper: consome 1 PERGUNTA no servidor (guardrail MAX_GUESSES_PER_DAY/dia)
-    //    e atualiza os contadores locais. Chamado SÓ quando o desfecho do cartão
-    //    está RESOLVIDO (erro respondido, prêmio entregue, ou desfecho legítimo
-    //    sem prêmio) — nunca numa falha transitória, p/ não gastar a tentativa
-    //    do jogador à toa.
-    const consumePlay = async (won: boolean) => {
-      if (!auth.user) return;
-      const { data, error } = await supabase.rpc('record_game_play', {
-        p_won: won,
-        p_sticker_id: gameState.target?.id ?? null,
+    // ── UMA ÚNICA chamada ATÔMICA e IDEMPOTENTE ───────────────────────────
+    // play_game_round (migration 042) grava a pergunta E entrega a carta na
+    // MESMA transação, com token de idempotência por cartão. Isso elimina:
+    //   • carta entregue sem a pergunta gravada (ou vice-versa) — é atômico;
+    //   • prêmio em dobro por retry/resposta perdida — o token devolve o
+    //     mesmo resultado sem conceder de novo.
+    // Em falha transitória NADA é gravado (rollback) → a pergunta não é gasta
+    // e o jogador responde de novo com o MESMO token.
+    if (!auth.user) { guessLockRef.current = false; return; }
+    if (isCorrect) setGameReward(null);
+    setGameRewardClaiming(isCorrect);
+    try {
+      const { data, error } = await supabase.rpc('play_game_round', {
+        p_won: isCorrect,
+        p_target_sticker_id: gameState.target?.id ?? null,
+        p_client_token: gameTokenRef.current || null,
       });
-      if (!error && data?.allowed === false) {
-        setGameState(p => ({
-          ...p,
-          canPlay: false,
-          feedback: `Você já usou suas ${MAX_GUESSES_PER_DAY} perguntas de hoje! Volte amanhã.`,
-        }));
+
+      // Erro transitório (rede/servidor): transação não comitou → nada gasto.
+      if (error) {
+        guessLockRef.current = false;
+        setGameState(p => ({ ...p, won: false, feedback: 'Falha temporária. Sua pergunta NÃO foi gasta — responda novamente.' }));
         return;
       }
+
+      // Teto de perguntas do dia.
+      if (data?.allowed === false) {
+        setGameState(p => ({ ...p, canPlay: false, feedback: `Você já usou suas ${MAX_GUESSES_PER_DAY} perguntas de hoje! Volte amanhã.` }));
+        return;
+      }
+
       if (typeof data?.plays_remaining === 'number') setPlaysRemaining(data.plays_remaining);
       setLocalGameStats(p => {
         const isToday = p.lastGuessDate === today;
         return {
           ...p,
-          guessesRight: p.guessesRight + (won ? 1 : 0),
+          guessesRight: p.guessesRight + (isCorrect ? 1 : 0),
           guessesTotal: p.guessesTotal + 1,
           lastGuessDate: today,
           dailyGuessCount: (isToday ? (p.dailyGuessCount ?? 0) : 0) + 1,
         };
       });
-    };
 
-    // ── ERRO: a tentativa é consumida na hora; fim do cartão ──
-    if (!isCorrect) {
-      await consumePlay(false);
-      return;
-    }
+      if (!isCorrect) return; // errou: pergunta gravada, fim do cartão
 
-    // ── ACERTO: resgata a figurinha PRIMEIRO; só consome a tentativa quando o
-    //    resultado está RESOLVIDO. Antes a tentativa era gasta ANTES do resgate:
-    //    se o resgate falhasse (rede/servidor — justamente as instabilidades do
-    //    banco), o jogador ficava SEM carta E SEM a tentativa ("joguei e não
-    //    recebi"). Agora, em falha transitória, a pergunta NÃO é gasta e ele
-    //    pode tentar de novo. O teto de recompensas (game_claims, 5/dia, em
-    //    claim_game_reward) continua sendo o limite real de prêmios, então não
-    //    gastar a tentativa numa falha NÃO permite ganhar além do teto.
-    setGameReward(null);
-    const { sticker, reason } = await claimGameReward();
+      // Acerto COM carta entregue (inclui replay idempotente, que devolve a carta).
+      if (data?.reward) {
+        await packs.refetchInventory();
+        setGameReward(data.reward as DbSticker);
+        setGameState(p => ({ ...p, feedback: 'Excelente! Você reconheceu o talento!' }));
+        return;
+      }
 
-    if (sticker) {
-      await consumePlay(true);
-      setGameReward(sticker);
-      setGameState(p => ({ ...p, feedback: 'Excelente! Você reconheceu o talento!' }));
-      return;
-    }
-
-    if (reason === 'ALBUM_COMPLETE' || reason === 'DAILY_LIMIT_REACHED') {
-      // Desfecho LEGÍTIMO sem carta nova → consome a tentativa.
-      await consumePlay(true);
+      // Acerto SEM carta nova (desfecho legítimo): álbum completo ou teto de prêmios.
       setGameState(p => ({
         ...p,
-        feedback: reason === 'DAILY_LIMIT_REACHED'
+        feedback: data?.reason === 'DAILY_LIMIT_REACHED'
           ? `Você acertou! Mas já atingiu o limite de ${MAX_GUESSES_PER_DAY} recompensas no jogo hoje — volte amanhã.`
-          : 'Você acertou! E já tem todas as figurinhas do álbum! 🎉',
+          : data?.reason === 'ALBUM_COMPLETE'
+            ? 'Você acertou! E já tem todas as figurinhas do álbum! 🎉'
+            : 'Você acertou!',
       }));
-      return;
+    } catch {
+      guessLockRef.current = false;
+      setGameState(p => ({ ...p, won: false, feedback: 'Falha temporária. Sua pergunta NÃO foi gasta — responda novamente.' }));
+    } finally {
+      setGameRewardClaiming(false);
     }
-
-    // ── Falha TRANSITÓRIA (rede/servidor): NÃO consome a tentativa ──
-    // Libera a trava e devolve o cartão ao estado jogável p/ nova tentativa.
-    guessLockRef.current = false;
-    setGameState(p => ({
-      ...p,
-      won: false,
-      feedback: 'Falha temporária ao registrar a figurinha. Sua pergunta NÃO foi gasta — responda novamente.',
-    }));
   };
 
   if (auth.loading) return (
