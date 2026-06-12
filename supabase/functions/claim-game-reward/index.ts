@@ -93,22 +93,25 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Escolhe figurinha do pool FILTRADO, ponderada por raridade ──
-    // ATUALIZADO (2026-06-11): Aumentado 10x as chances de ÉPICO e LENDÁRIO
-    // Novo balanço:
-    //   common:    72 (44.2%) - mantém base
-    //   rare:      21 (12.9%) - mantém base
-    //   epic:      50 (30.7%) - 10x mais (era 5%)
-    //   legendary: 20 (12.3%) - 10x mais (era 2%)
-    // Total peso: 163 (antes era 100)
+    // REVISADO (2026-06-11): o boost de 10x (epic 50 / legendary 20) entregava
+    // lendárias em ~12% dos acertos, banalizando a raridade. Voltamos a um
+    // balanço em que ÉPICO e LENDÁRIO continuam sendo recompensa de acerto
+    // (a pergunta nunca mais mostra lendária — ela só vem por aqui), mas
+    // permanecem RAROS o suficiente para terem valor:
+    //   common:    60 (60%)
+    //   rare:      25 (25%)
+    //   epic:      11 (11%)  - mais que o dobro do original (era 5%)
+    //   legendary:  4 ( 4%)  - o dobro do original (era 2%)
+    // Total peso: 100 — ajuste estes números aqui se quiser calibrar.
     const GAME_REWARD_WEIGHTS: Record<string, number> = {
-      common: 72,
-      rare: 21,
-      epic: 50,      // ← AUMENTADO DE 5 PARA 50 (10x)
-      legendary: 20, // ← AUMENTADO DE 2 PARA 20 (10x)
+      common: 60,
+      rare: 25,
+      epic: 11,
+      legendary: 4,
     }
 
     const pool = availablePool
-    const poolWeights = pool.map((s) => GAME_REWARD_WEIGHTS[s.rarity] ?? 72)
+    const poolWeights = pool.map((s) => GAME_REWARD_WEIGHTS[s.rarity] ?? 60)
     const totalPoolWeight = poolWeights.reduce((a, b) => a + b, 0)
     let roll = Math.random() * totalPoolWeight
     let sticker = pool[pool.length - 1]

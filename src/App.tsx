@@ -455,23 +455,20 @@ export default function App() {
       setView('game');
       return;
     }
-    const today = new Date().toISOString().split('T')[0];
-
-    // Limite AUTORITATIVO no servidor (por USUÁRIO, vale em qualquer aparelho):
-    // conta TENTATIVAS de hoje (cada resposta, acerto OU erro), não vitórias.
-    // Antes contava game_claims (só acertos), então errar não consumia nada e o
-    // jogo repetia perguntas até acertar 5. Agora são 5 perguntas/dia de fato.
+    // Limite AUTORITATIVO e ÚNICO: o SERVIDOR decide o dia (vira às 12:00 de
+    // Fortaleza, via current_game_day) e conta as TENTATIVAS do dia através de
+    // get_game_play_status(). O front NÃO calcula mais a data nem conta a tabela
+    // por conta própria — era exatamente isso que gerava o bug de "você já usou
+    // suas perguntas" para quem não tinha jogado: a UI contava por data UTC,
+    // divergente do dia-do-jogo do servidor (e do histórico já gravado).
     if (auth.user) {
-      const { count, error } = await supabase
-        .from('game_plays')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', auth.user.id)
-        .eq('play_date', today);
-      const used = count ?? 0;
-      setPlaysRemaining(Math.max(0, MAX_GUESSES_PER_DAY - used));
-      if (!error && used >= MAX_GUESSES_PER_DAY) {
-        setGameState(p => ({ ...p, feedback: `Você já usou suas ${MAX_GUESSES_PER_DAY} perguntas de hoje! Volte amanhã.`, canPlay: false }));
-        setView('game'); return;
+      const { data: status, error } = await supabase.rpc('get_game_play_status');
+      if (!error && status) {
+        setPlaysRemaining(typeof status.plays_remaining === 'number' ? status.plays_remaining : null);
+        if (status.can_play === false) {
+          setGameState(p => ({ ...p, feedback: `Você já usou suas ${MAX_GUESSES_PER_DAY} perguntas de hoje! Volte amanhã.`, canPlay: false }));
+          setView('game'); return;
+        }
       }
     }
 
@@ -481,8 +478,16 @@ export default function App() {
     // Assim o jogo nunca pede para adivinhar uma carta já colecionada.
     const ownedSet = new Set(packs.ownedIds);
     const unowned = pool.filter(c => !ownedSet.has(c.id));
-    // Álbum completo (nada a ganhar): cai de volta para o catálogo inteiro p/ manter o jogo jogável.
-    const targetPool = unowned.length > 0 ? unowned : pool;
+    // Lendárias NÃO entram na PERGUNTA — elas só vêm como RECOMPENSA de acerto
+    // (sorteio ponderado no servidor, em claim-game-reward). Assim a pergunta
+    // nunca "mostra" uma lendária; ganhá-la depende de acertar.
+    const nonLegendaryUnowned = unowned.filter(c => c.rarity !== Rarity.LEGENDARY);
+    // Fallbacks p/ manter o jogo jogável: sem não-lendárias novas → usa as novas;
+    // álbum completo → cai para o catálogo inteiro.
+    const targetPool =
+      nonLegendaryUnowned.length > 0 ? nonLegendaryUnowned
+      : unowned.length > 0 ? unowned
+      : pool;
     const target = targetPool[Math.floor(Math.random() * targetPool.length)];
     // Distratores vêm do catálogo inteiro (menos o alvo), garantindo 4 alternativas.
     const opts = [target];
