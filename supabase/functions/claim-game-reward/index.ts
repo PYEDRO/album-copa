@@ -93,25 +93,38 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── Escolhe figurinha do pool FILTRADO, ponderada por raridade ──
-    // REVISADO (2026-06-11): o boost de 10x (epic 50 / legendary 20) entregava
-    // lendárias em ~12% dos acertos, banalizando a raridade. Voltamos a um
-    // balanço em que ÉPICO e LENDÁRIO continuam sendo recompensa de acerto
-    // (a pergunta nunca mais mostra lendária — ela só vem por aqui), mas
-    // permanecem RAROS o suficiente para terem valor:
-    //   common:    60 (60%)
-    //   rare:      25 (25%)
-    //   epic:      11 (11%)  - mais que o dobro do original (era 5%)
-    //   legendary:  4 ( 4%)  - o dobro do original (era 2%)
-    // Total peso: 100 — ajuste estes números aqui se quiser calibrar.
+    // ATUALIZADO (2026-06-12): "liberar lendária" no jogo. O peso é POR CARTA e
+    // o pool já está filtrado p/ cartas NÃO possuídas. Como há muitas comuns e
+    // poucas lendárias, a chance real de lendária é:
+    //   P(lendária) = (nº lendárias faltando × peso_lendária) / soma dos pesos
+    // Por isso a lendária precisa de peso MUITO maior p/ não ser "afogada".
+    // Aqui cada LENDÁRIA pesa ~8× uma comum (120 vs 15): enquanto o jogador
+    // tiver lendária faltando, ela vira o prêmio mais provável do acerto.
+    //   common:    15
+    //   rare:      20
+    //   epic:      35
+    //   legendary: 120
+    // Ajuste o número da legendary aqui se quiser mais/menos.
     const GAME_REWARD_WEIGHTS: Record<string, number> = {
-      common: 60,
-      rare: 25,
-      epic: 11,
-      legendary: 4,
+      common: 15,
+      rare: 20,
+      epic: 35,
+      legendary: 120,
     }
 
-    const pool = availablePool
-    const poolWeights = pool.map((s) => GAME_REWARD_WEIGHTS[s.rarity] ?? 60)
+    // ── REGRA "LENDÁRIA PRIMEIRO" (evento de finalização, 2026-06-12) ──
+    // Enquanto o jogador AINDA tiver lendária faltando, o acerto entrega
+    // EXCLUSIVAMENTE lendária (sorteio uniforme entre as que faltam). Só depois
+    // de completar todas as lendárias o prêmio volta ao pool normal ponderado.
+    // É a probabilidade MÁXIMA possível p/ quem só precisa de lendária.
+    // Para desligar após o evento: troque PRIORITIZE_LEGENDARY para false.
+    const PRIORITIZE_LEGENDARY = true
+    const missingLegendaries = availablePool.filter((s) => s.rarity === 'legendary')
+    const pool =
+      PRIORITIZE_LEGENDARY && missingLegendaries.length > 0
+        ? missingLegendaries
+        : availablePool
+    const poolWeights = pool.map((s) => GAME_REWARD_WEIGHTS[s.rarity] ?? 15)
     const totalPoolWeight = poolWeights.reduce((a, b) => a + b, 0)
     let roll = Math.random() * totalPoolWeight
     let sticker = pool[pool.length - 1]
